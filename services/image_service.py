@@ -1,22 +1,22 @@
-import requests
-from PIL import Image
-from io import BytesIO
-
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+from api.client import client
 
 
 def load_card_image(card):
 
-    url = card.image_uris["normal"]
+    if not card.image_uris:
+        return None
 
-    print("URL:", url)
+    url = card.image_uris.get("normal")
 
-    response = requests.get(url, headers=HEADERS, timeout=30, stream=True)
+    if not url:
+        return None
 
-    print("HTTP:", response.status_code)
+    try:
 
-    image = Image.open(BytesIO(response.content))
+        return client.get_image(url)
 
-    print("IMAGE:", image.size)
+    except Exception as e:
 
-    return image
+        print("Ошибка загрузки изображения:", e)
+
+        return None

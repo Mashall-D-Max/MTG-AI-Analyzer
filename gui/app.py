@@ -66,6 +66,10 @@ class App(ctk.CTk):
         if card:
             self.card_panel.show_card(card)
             image = load_card_image(card)
+
+            print("image =", image)
+            print("type =", type(image))
+
             self.image_panel.show_image(image)
             self.status.label.configure(text=f"Загружена карта: {card.name}")
         else:
