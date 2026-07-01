@@ -54,9 +54,19 @@ class CompareAdvisor:
                     missing_quantity,
                 )
 
+                remove_card = user_card_map.get(extra_card_name)
+
+                add_card = reference_card_map.get(missing_card_name)
+
                 mana_change = self._build_mana_change(
-                    remove_card=user_card_map.get(extra_card_name),
-                    add_card=reference_card_map.get(missing_card_name),
+                    remove_card=remove_card,
+                    add_card=add_card,
+                    quantity=quantity,
+                )
+
+                mana_delta = self._build_mana_delta(
+                    remove_card=remove_card,
+                    add_card=add_card,
                     quantity=quantity,
                 )
 
@@ -66,6 +76,7 @@ class CompareAdvisor:
                         "add": missing_card_name,
                         "quantity": quantity,
                         "mana_change": mana_change,
+                        "mana_delta": mana_delta,
                     }
                 )
 
@@ -103,21 +114,16 @@ class CompareAdvisor:
         if remove_card is None or add_card is None:
             return "мана: нет данных"
 
-        remove_pips = self._count_colored_pips(remove_card.mana_cost)
-
-        add_pips = self._count_colored_pips(add_card.mana_cost)
-
-        delta = {}
-
-        for color in self.COLORS:
-            delta[color] = (
-                add_pips.get(color, 0) - remove_pips.get(color, 0)
-            ) * quantity
+        mana_delta = self._build_mana_delta(
+            remove_card=remove_card,
+            add_card=add_card,
+            quantity=quantity,
+        )
 
         parts = []
 
         for color in self.COLORS:
-            value = delta.get(color, 0)
+            value = mana_delta.get(color, 0)
 
             if value == 0:
                 continue
@@ -130,6 +136,28 @@ class CompareAdvisor:
             return "мана: без изменений"
 
         return "мана: " + ", ".join(parts)
+
+    def _build_mana_delta(
+        self,
+        remove_card,
+        add_card,
+        quantity,
+    ):
+        delta = {color: 0 for color in self.COLORS}
+
+        if remove_card is None or add_card is None:
+            return delta
+
+        remove_pips = self._count_colored_pips(remove_card.mana_cost)
+
+        add_pips = self._count_colored_pips(add_card.mana_cost)
+
+        for color in self.COLORS:
+            delta[color] = (
+                add_pips.get(color, 0) - remove_pips.get(color, 0)
+            ) * quantity
+
+        return delta
 
     def _count_colored_pips(self, mana_cost):
         result = {color: 0 for color in self.COLORS}

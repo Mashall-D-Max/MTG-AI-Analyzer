@@ -1,7 +1,8 @@
 import customtkinter as ctk
 
-from utils.text_shortcuts import bind_text_shortcuts
 from meta.compare_advisor import CompareAdvisor
+from meta.mana_impact_advisor import ManaImpactAdvisor
+from utils.text_shortcuts import bind_text_shortcuts
 
 
 class MetaPanel(ctk.CTkFrame):
@@ -118,6 +119,7 @@ class MetaPanel(ctk.CTkFrame):
         self._write("\n\n")
 
         self._write("### MAINBOARD ###\n\n")
+
         self._write_compare_block(
             comparison=mainboard,
             user_deck_cards=user_deck.cards if user_deck else None,
@@ -129,11 +131,43 @@ class MetaPanel(ctk.CTkFrame):
         self._write("\n\n")
 
         self._write("### SIDEBOARD ###\n\n")
+
         self._write_compare_block(
             comparison=sideboard,
             user_deck_cards=user_deck.sideboard if user_deck else None,
             reference_deck_cards=reference_deck.sideboard if reference_deck else None,
         )
+
+        self._write("\n")
+        self._write("=" * 40)
+        self._write("\n\n")
+
+        self._write("### ПРОВЕРКА МАНЫ ПОСЛЕ MAINBOARD-ЗАМЕН ###\n\n")
+
+        if user_deck is None or reference_deck is None:
+            self._write("Нет данных для проверки маны.\n")
+            return
+
+        mana_report = ManaImpactAdvisor().analyze(
+            user_deck=user_deck,
+            comparison=mainboard,
+            user_deck_cards=user_deck.cards,
+            reference_deck_cards=reference_deck.cards,
+        )
+
+        if not mana_report:
+            self._write("Цветных требований по мане не найдено.\n")
+            return
+
+        for item in mana_report:
+            status = "OK" if item["ok"] else "НЕ ХВАТАЕТ"
+
+            self._write(
+                f"{item['symbol']} {item['name']}: "
+                f"источники {item['sources']} / "
+                f"требования {item['required']} "
+                f"({item['difference']}) — {status}\n"
+            )
 
     def _show_single_compare_result(
         self,
@@ -218,3 +252,27 @@ class MetaPanel(ctk.CTkFrame):
                 f"{recommendation['add']} | "
                 f"{mana_change}\n"
             )
+
+    def show_loading(self, format_name):
+        self.text.delete("1.0", "end")
+
+        self._write("Загрузка меты...\n\n")
+        self._write(f"Формат: {format_name}\n")
+
+    def show_compare_loading(self):
+        self.text.delete("1.0", "end")
+
+        self._write("Сравнение колод...\n\n")
+        self._write("Загружаю эталонную колоду с MTGDecks и сравниваю с текущей.\n")
+
+    def show_error(self, message):
+        self.text.delete("1.0", "end")
+
+        self._write("Ошибка\n\n")
+        self._write(str(message))
+
+    def clear(self):
+        self.text.delete("1.0", "end")
+
+    def _write(self, text):
+        self.text.insert("end", text)
