@@ -20,8 +20,6 @@ class ArenaImporter(BaseImporter):
 
     Sideboard
     2 Duress (M21) 96
-
-    На текущем этапе Sideboard игнорируется.
     """
 
     ARENA_SET_PATTERN = re.compile(r"\s+\([A-Z0-9]{2,6}\)\s+\S+\s*$")
@@ -51,9 +49,6 @@ class ArenaImporter(BaseImporter):
                 in_sideboard = True
                 continue
 
-            if in_sideboard:
-                continue
-
             parsed = self._parse_card_line(line)
 
             if parsed is None:
@@ -66,7 +61,10 @@ class ArenaImporter(BaseImporter):
             if card is None:
                 continue
 
-            deck.add_card(card, quantity)
+            if in_sideboard:
+                deck.add_sideboard_card(card, quantity)
+            else:
+                deck.add_card(card, quantity)
 
         return deck
 
