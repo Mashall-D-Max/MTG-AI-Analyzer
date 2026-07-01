@@ -4,7 +4,6 @@ class Card:
     """
 
     def __init__(self, data):
-
         self.name = data.get("name") or ""
 
         self.mana_cost = data.get("mana_cost") or ""
@@ -29,8 +28,9 @@ class Card:
 
         self.image_uris = data.get("image_uris") or {}
 
-    def show(self):
+        self.card_faces = data.get("card_faces") or []
 
+    def show(self):
         print("=" * 60)
         print(self.name.upper())
         print("=" * 60)
