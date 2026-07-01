@@ -70,13 +70,30 @@ print("=" * 60)
 print(deck_text)
 
 if "2 Duress" not in deck_text:
-    raise RuntimeError("Ожидалось, что в mainboard будет добавлен Duress")
+    raise RuntimeError("Ожидалось, что Duress будет добавлен")
 
 if "2 Go Blank" in deck_text:
     raise RuntimeError("Go Blank должен быть убран из sideboard")
 
 if "2 Rest in Peace" not in deck_text:
     raise RuntimeError("Rest in Peace должен быть добавлен в sideboard")
+
+lines = deck_text.splitlines()
+
+fatal_push_index = lines.index("4 Fatal Push")
+thoughtseize_index = lines.index("2 Thoughtseize")
+plains_index = lines.index("2 Plains")
+duress_main_index = lines.index("2 Duress")
+
+if not fatal_push_index < thoughtseize_index < plains_index < duress_main_index:
+    raise RuntimeError("Порядок mainboard нарушен")
+
+sideboard_index = lines.index("Sideboard")
+duress_side_index = lines.index("2 Duress", sideboard_index)
+rest_index = lines.index("2 Rest in Peace")
+
+if not sideboard_index < duress_side_index < rest_index:
+    raise RuntimeError("Порядок sideboard нарушен")
 
 print()
 print("RESULT: OK")
