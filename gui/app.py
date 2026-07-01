@@ -1,3 +1,5 @@
+import threading
+
 import customtkinter as ctk
 
 from tkinter import filedialog
@@ -122,6 +124,10 @@ class App(ctk.CTk):
             side="bottom",
         )
 
+    # ======================================================
+    # Card search
+    # ======================================================
+
     def search_card(self, card_name):
         card_name = card_name.strip()
 
@@ -131,19 +137,53 @@ class App(ctk.CTk):
 
         self.status.label.configure(text=f"Загрузка карты: {card_name}")
 
-        card = get_card(card_name)
+        self._run_background(
+            target=self._search_card_worker,
+            args=(card_name,),
+        )
 
-        if card is None:
-            self.status.label.configure(text="Карта не найдена")
-            return
+    def _search_card_worker(self, card_name):
+        try:
+            card = get_card(card_name)
 
+            if card is None:
+                self.after(
+                    0,
+                    self._on_card_not_found,
+                )
+                return
+
+            image = load_card_image(card)
+
+            self.after(
+                0,
+                self._on_card_loaded,
+                card,
+                image,
+            )
+
+        except Exception as error:
+            self.after(
+                0,
+                self._on_card_error,
+                str(error),
+            )
+
+    def _on_card_loaded(self, card, image):
         self.card_panel.show_card(card)
-
-        image = load_card_image(card)
-
         self.image_panel.show_image(image)
 
         self.status.label.configure(text=f"Загружена карта: {card.name}")
+
+    def _on_card_not_found(self):
+        self.status.label.configure(text="Карта не найдена")
+
+    def _on_card_error(self, message):
+        self.status.label.configure(text=f"Ошибка загрузки карты: {message}")
+
+    # ======================================================
+    # Deck import
+    # ======================================================
 
     def open_deck_file(self):
         filename = filedialog.askopenfilename(
@@ -253,27 +293,62 @@ Sideboard
     def analyze_deck_source(self, source, success_prefix):
         self.status.label.configure(text="Загрузка и анализ колоды...")
 
+        self.open_deck_button.configure(state="disabled")
+        self.paste_deck_button.configure(state="disabled")
+
+        self._run_background(
+            target=self._analyze_deck_worker,
+            args=(source, success_prefix),
+        )
+
+    def _analyze_deck_worker(self, source, success_prefix):
         try:
             deck = ImportManager().load(source)
 
             analysis = DeckAnalyzer(deck).analyze()
 
-            self.deck_list_panel.show_deck(deck)
-            self.deck_analysis_panel.show_analysis(analysis)
-
-            self.status.label.configure(
-                text=(
-                    f"{success_prefix} "
-                    f"Mainboard: {deck.mainboard_size}, "
-                    f"Sideboard: {deck.sideboard_size}"
-                )
+            self.after(
+                0,
+                self._on_deck_loaded,
+                deck,
+                analysis,
+                success_prefix,
             )
 
         except Exception as error:
-            self.deck_list_panel.show_error(str(error))
-            self.deck_analysis_panel.show_error(str(error))
+            self.after(
+                0,
+                self._on_deck_error,
+                str(error),
+            )
 
-            self.status.label.configure(text="Ошибка загрузки колоды")
+    def _on_deck_loaded(self, deck, analysis, success_prefix):
+        self.deck_list_panel.show_deck(deck)
+        self.deck_analysis_panel.show_analysis(analysis)
+
+        self.open_deck_button.configure(state="normal")
+        self.paste_deck_button.configure(state="normal")
+
+        self.status.label.configure(
+            text=(
+                f"{success_prefix} "
+                f"Mainboard: {deck.mainboard_size}, "
+                f"Sideboard: {deck.sideboard_size}"
+            )
+        )
+
+    def _on_deck_error(self, message):
+        self.deck_list_panel.show_error(message)
+        self.deck_analysis_panel.show_error(message)
+
+        self.open_deck_button.configure(state="normal")
+        self.paste_deck_button.configure(state="normal")
+
+        self.status.label.configure(text="Ошибка загрузки колоды")
+
+    # ======================================================
+    # Meta loading
+    # ======================================================
 
     def load_pioneer_meta(self):
         format_name = "Pioneer"
@@ -282,18 +357,63 @@ Sideboard
 
         self.status.label.configure(text="Загрузка меты Pioneer...")
 
+        self.load_meta_button.configure(state="disabled")
+
+        self._run_background(
+            target=self._load_meta_worker,
+            args=(format_name,),
+        )
+
+    def _load_meta_worker(self, format_name):
         try:
             provider = MTGDecksProvider()
 
             snapshot = provider.get_meta(format_name)
 
-            self.meta_panel.show_snapshot(snapshot)
-
-            self.status.label.configure(
-                text=(f"Мета Pioneer загружена. " f"Архетипов: {snapshot.count}")
+            self.after(
+                0,
+                self._on_meta_loaded,
+                snapshot,
             )
 
         except Exception as error:
-            self.meta_panel.show_error(str(error))
+            self.after(
+                0,
+                self._on_meta_error,
+                str(error),
+            )
 
-            self.status.label.configure(text="Ошибка загрузки меты")
+    def _on_meta_loaded(self, snapshot):
+        self.meta_panel.show_snapshot(snapshot)
+
+        self.load_meta_button.configure(state="normal")
+
+        self.status.label.configure(
+            text=(
+                f"Мета {snapshot.format_name} загружена. "
+                f"Архетипов: {snapshot.count}"
+            )
+        )
+
+    def _on_meta_error(self, message):
+        self.meta_panel.show_error(message)
+
+        self.load_meta_button.configure(state="normal")
+
+        self.status.label.configure(text="Ошибка загрузки меты")
+
+    # ======================================================
+    # Helpers
+    # ======================================================
+
+    def _run_background(self, target, args=None):
+        if args is None:
+            args = ()
+
+        thread = threading.Thread(
+            target=target,
+            args=args,
+            daemon=True,
+        )
+
+        thread.start()
