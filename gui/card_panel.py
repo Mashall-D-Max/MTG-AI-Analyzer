@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from utils.mana_symbols import format_mana_cost
+from utils.text_shortcuts import bind_text_shortcuts
 
 
 class CardPanel(ctk.CTkFrame):
@@ -27,6 +28,9 @@ class CardPanel(ctk.CTkFrame):
             padx=10,
             pady=10,
         )
+
+        # Подключаем горячие клавиши
+        bind_text_shortcuts(self.textbox)
 
     def show_card(self, card):
         self.textbox.delete("1.0", "end")

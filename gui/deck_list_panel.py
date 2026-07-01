@@ -1,4 +1,6 @@
 import customtkinter as ctk
+from utils.text_shortcuts import bind_text_shortcuts
+from utils.text_shortcuts import bind_text_shortcuts
 
 
 class DeckListPanel(ctk.CTkFrame):
@@ -28,6 +30,9 @@ class DeckListPanel(ctk.CTkFrame):
             padx=10,
             pady=10,
         )
+
+        # Подключаем горячие клавиши
+        bind_text_shortcuts(self.text)
 
     def show_deck(self, deck):
         self.text.delete("1.0", "end")

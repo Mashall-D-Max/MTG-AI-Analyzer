@@ -3,6 +3,7 @@ import threading
 import customtkinter as ctk
 
 from tkinter import filedialog
+from utils.text_shortcuts import bind_text_shortcuts
 
 from analyzer.deck_analyzer import DeckAnalyzer
 from api.scryfall import get_card
@@ -255,6 +256,9 @@ class App(ctk.CTk):
             padx=20,
             pady=10,
         )
+
+        # Подключаем горячие клавиши
+        bind_text_shortcuts(self.paste_textbox)
 
         buttons_panel = ctk.CTkFrame(self.paste_window)
         buttons_panel.pack(fill="x", padx=20, pady=15)

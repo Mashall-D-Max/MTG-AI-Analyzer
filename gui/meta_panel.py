@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from utils.text_shortcuts import bind_text_shortcuts
 
 
 class MetaPanel(ctk.CTkFrame):
@@ -27,6 +28,9 @@ class MetaPanel(ctk.CTkFrame):
             padx=10,
             pady=10,
         )
+
+        # Подключаем горячие клавиши
+        bind_text_shortcuts(self.text)
 
     def show_snapshot(self, snapshot):
         self.text.delete("1.0", "end")

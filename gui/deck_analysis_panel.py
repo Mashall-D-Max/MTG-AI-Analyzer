@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from utils.text_shortcuts import bind_text_shortcuts
 
 
 class DeckAnalysisPanel(ctk.CTkFrame):
@@ -35,6 +36,9 @@ class DeckAnalysisPanel(ctk.CTkFrame):
             padx=10,
             pady=10,
         )
+
+        # Подключаем горчие клавиши
+        bind_text_shortcuts(self.text)
 
     def show_analysis(self, analysis):
         self.text.delete("1.0", "end")
