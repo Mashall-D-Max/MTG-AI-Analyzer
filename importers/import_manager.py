@@ -5,6 +5,7 @@ from importers.registry import registry
 import importers.txt_importer
 import importers.arena_importer
 import importers.clipboard_importer
+import importers.mtgdecks_importer
 
 
 class ImportManager:

@@ -8,7 +8,9 @@ from PIL import Image
 from config import (
     IMAGE_TIMEOUT,
     REQUEST_TIMEOUT,
+    SCRYFALL_429_DELAY,
     SCRYFALL_API,
+    SCRYFALL_REQUEST_DELAY,
     USER_AGENT,
 )
 from utils.logger import logger
@@ -32,16 +34,33 @@ class ScryfallClient:
             }
         )
 
+        self._last_request_at = 0
+
     def get_card(self, name):
         url = f"{SCRYFALL_API}/cards/named"
 
         for attempt in range(self.RETRY_COUNT):
             try:
+                self._wait_for_rate_limit()
+
                 response = self.session.get(
                     url,
                     params={"exact": name},
                     timeout=REQUEST_TIMEOUT,
                 )
+
+                if response.status_code == 429:
+                    delay = self._get_retry_after(response)
+
+                    logger.warning(
+                        f"Scryfall rate limit. Ждём {delay} сек. " f"Карта: {name}"
+                    )
+
+                    time.sleep(delay)
+                    continue
+
+                if response.status_code == 404:
+                    response.raise_for_status()
 
                 response.raise_for_status()
 
@@ -58,14 +77,11 @@ class ScryfallClient:
                 else:
                     raise
 
+        raise RuntimeError(f"Не удалось загрузить карту после повторов: {name}")
+
     def get_image(self, url):
         """
         Загрузить изображение карты.
-
-        Важно:
-        - используем User-Agent;
-        - используем image Accept;
-        - если URL с query-параметром дал 400, пробуем без query.
         """
 
         urls_to_try = [
@@ -122,6 +138,30 @@ class ScryfallClient:
                     time.sleep(self.RETRY_DELAY)
                 else:
                     raise
+
+    def _wait_for_rate_limit(self):
+        now = time.monotonic()
+
+        elapsed = now - self._last_request_at
+
+        if elapsed < SCRYFALL_REQUEST_DELAY:
+            time.sleep(SCRYFALL_REQUEST_DELAY - elapsed)
+
+        self._last_request_at = time.monotonic()
+
+    def _get_retry_after(self, response):
+        retry_after = response.headers.get("Retry-After")
+
+        if retry_after:
+            try:
+                return max(
+                    float(retry_after),
+                    SCRYFALL_429_DELAY,
+                )
+            except ValueError:
+                pass
+
+        return SCRYFALL_429_DELAY
 
     def _remove_query_params(self, url):
         if not url:

@@ -35,32 +35,26 @@ class MTGDecksProvider(BaseProvider):
         "pauper": "Pauper",
     }
 
-    CARD_TYPES = (
-        "Creature",
-        "Instant",
-        "Sorcery",
-        "Artifact",
-        "Enchantment",
-        "Planeswalker",
-        "Battle",
-        "Land",
-    )
-
     PERCENT_PATTERN = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 
     LINE_META_PATTERN = re.compile(r"^(.+?)[\-\—\|]\s*(\d+(?:[.,]\d+)?)\s*%")
 
     SECTION_PATTERN = re.compile(
-        r"^(Creature|Instant|Sorcery|Artifact|Enchantment|Planeswalker|Battle|Land)\s+\[\d+\]$",
+        r"^(Creature|Instant|Sorcery|Artifact|Enchantment|Planeswalker|Battle|Land)\s*[\[\(]\d+[\]\)]$",
+        re.IGNORECASE,
+    )
+
+    MAINDECK_PATTERN = re.compile(
+        r"^Maindeck\s*[\[\(]\d+[\]\)]$",
         re.IGNORECASE,
     )
 
     SIDEBOARD_PATTERN = re.compile(
-        r"^Sideboard\s+\[\d+\]$",
+        r"^Sideboard(?:\s*[\[\(]\d+[\]\)])?$",
         re.IGNORECASE,
     )
 
-    CARD_LINE_PATTERN = re.compile(r"^(\d+)\s+(.+)$")
+    CARD_LINE_PATTERN = re.compile(r"^(\d{1,2})\s+(.+)$")
 
     @property
     def name(self):
@@ -242,70 +236,192 @@ class MTGDecksProvider(BaseProvider):
         """
         Извлекает decklist из HTML.
 
-        Сначала пытаемся вытащить структурированный список:
-        Creature [..], Instant [..], Land [..], Sideboard [..].
-
-        Возвращаем текст в формате:
-
-        Deck
-        4 Fatal Push
-        ...
-        Sideboard
-        2 Duress
+        Приоритет:
+        1. Export block после Copy to clipboard and import!
+        2. Структурированные секции Creature/Instant/Land/Sideboard
         """
 
-        soup = BeautifulSoup(html, "html.parser")
+        export_text = self._extract_export_deck_text(html)
 
-        lines = [
-            self._clean_text(line)
-            for line in soup.get_text("\n", strip=True).splitlines()
-        ]
+        if export_text:
+            return export_text
 
+        structured_text = self._extract_structured_deck_text(html)
+
+        if structured_text:
+            return structured_text
+
+        return ""
+
+    def _extract_export_deck_text(self, html):
+        lines = self._html_to_lines(html)
+
+        marker_index = self._find_export_marker_index(lines)
+
+        if marker_index is None:
+            return ""
+
+        deck_index = self._find_deck_marker_index(
+            lines=lines,
+            start_index=marker_index,
+        )
+
+        if deck_index is None:
+            return ""
+
+        return self._parse_lines_to_deck_text(
+            lines=lines,
+            start_index=deck_index + 1,
+            require_sections=False,
+        )
+
+    def _extract_structured_deck_text(self, html):
+        lines = self._html_to_lines(html)
+
+        return self._parse_lines_to_deck_text(
+            lines=lines,
+            start_index=0,
+            require_sections=True,
+        )
+
+    def _parse_lines_to_deck_text(
+        self,
+        lines,
+        start_index=0,
+        require_sections=False,
+    ):
         result = ["Deck"]
 
-        in_deck_section = False
+        in_deck_area = not require_sections
+        in_card_section = not require_sections
         in_sideboard = False
+        sideboard_added = False
         found_cards = False
+        invalid_after_cards = 0
 
-        for line in lines:
+        index = start_index
+
+        while index < len(lines):
+            line = lines[index]
+
             if not line:
+                index += 1
                 continue
 
             if self._is_stop_line(line):
                 if found_cards:
                     break
 
+                index += 1
+                continue
+
+            if self.MAINDECK_PATTERN.match(line):
+                in_deck_area = True
+                in_card_section = False
+                in_sideboard = False
+                index += 1
+                continue
+
             if self.SECTION_PATTERN.match(line):
-                in_deck_section = True
+                in_deck_area = True
+                in_card_section = True
+                index += 1
                 continue
 
             if self.SIDEBOARD_PATTERN.match(line):
-                in_deck_section = True
+                in_deck_area = True
+                in_card_section = True
                 in_sideboard = True
-                result.append("Sideboard")
+
+                if not sideboard_added:
+                    result.append("Sideboard")
+                    sideboard_added = True
+
+                index += 1
                 continue
 
-            if not in_deck_section:
+            if require_sections and (not in_deck_area or not in_card_section):
+                index += 1
                 continue
 
-            parsed = self._parse_mtgdecks_card_line(line)
+            parsed = self._parse_card_from_lines(
+                lines=lines,
+                index=index,
+            )
 
             if parsed is None:
+                if found_cards:
+                    invalid_after_cards += 1
+
+                    if invalid_after_cards >= 25:
+                        break
+
+                index += 1
                 continue
 
-            quantity, card_name = parsed
+            quantity, card_name, next_index = parsed
 
-            if not card_name:
-                continue
+            if in_sideboard and not sideboard_added:
+                result.append("Sideboard")
+                sideboard_added = True
 
             result.append(f"{quantity} {card_name}")
 
             found_cards = True
+            invalid_after_cards = 0
+            index = next_index
 
         if not found_cards:
             return ""
 
         return "\n".join(result)
+
+    def _parse_card_from_lines(self, lines, index):
+        line = lines[index]
+
+        same_line = self._parse_mtgdecks_card_line(line)
+
+        if same_line is not None:
+            quantity, card_name = same_line
+
+            return quantity, card_name, index + 1
+
+        if not self._is_quantity_line(line):
+            return None
+
+        quantity = int(line)
+
+        next_index = index + 1
+
+        max_index = min(
+            len(lines),
+            index + 7,
+        )
+
+        while next_index < max_index:
+            candidate = lines[next_index]
+
+            if self._is_quantity_line(candidate):
+                return None
+
+            if self.SECTION_PATTERN.match(candidate):
+                return None
+
+            if self.SIDEBOARD_PATTERN.match(candidate):
+                return None
+
+            if self._is_stop_line(candidate):
+                return None
+
+            if self._is_probable_card_name(candidate):
+                card_name = self._clean_card_name_from_row(candidate)
+
+                if self._is_probable_card_name(card_name):
+                    return quantity, card_name, next_index + 1
+
+            next_index += 1
+
+        return None
 
     def _parse_mtgdecks_card_line(self, line):
         match = self.CARD_LINE_PATTERN.match(line)
@@ -323,7 +439,7 @@ class MTGDecksProvider(BaseProvider):
 
         card_name = self._clean_card_name_from_row(rest)
 
-        if not card_name:
+        if not self._is_probable_card_name(card_name):
             return None
 
         return quantity, card_name
@@ -331,8 +447,31 @@ class MTGDecksProvider(BaseProvider):
     def _clean_card_name_from_row(self, text):
         text = self._clean_text(text)
 
-        if " $" in text:
-            text = text.split(" $", 1)[0]
+        garbage_markers = (
+            "$",
+            "€",
+            " tix",
+            "@cardhoarder",
+            "@tcgplayer",
+            "@cardkingdom",
+            "hover a card",
+            "report deck error",
+            "last update",
+            "add/remove",
+            "collection quantity",
+            "visual view",
+            "list view",
+            "copy to clipboard",
+        )
+
+        lower_text = text.lower()
+
+        for marker in garbage_markers:
+            index = lower_text.find(marker)
+
+            if index != -1:
+                text = text[:index]
+                lower_text = text.lower()
 
         text = re.sub(
             r"\s+[CURM]\s*$",
@@ -347,12 +486,105 @@ class MTGDecksProvider(BaseProvider):
             "Visual view",
             "List view",
             "Copy to clipboard",
+            "Quantity",
+            "Collection",
+            "Deck",
+            "Sideboard",
         }
 
         if text in bad_values:
             return ""
 
         return text
+
+    def _is_quantity_line(self, line):
+        return (
+            re.fullmatch(
+                r"\d{1,2}",
+                line,
+            )
+            is not None
+        )
+
+    def _is_probable_card_name(self, line):
+        if not line:
+            return False
+
+        line = self._clean_text(line)
+
+        if not line:
+            return False
+
+        if len(line) > 90:
+            return False
+
+        if self._is_quantity_line(line):
+            return False
+
+        if line.isdigit():
+            return False
+
+        if not any(char.isalpha() for char in line):
+            return False
+
+        if self.SECTION_PATTERN.match(line):
+            return False
+
+        if self.SIDEBOARD_PATTERN.match(line):
+            return False
+
+        if self._is_stop_line(line):
+            return False
+
+        lower_line = line.lower()
+
+        bad_markers = (
+            "$",
+            "€",
+            " tix",
+            "@cardhoarder",
+            "@tcgplayer",
+            "@cardkingdom",
+            "hover a card",
+            "report deck error",
+            "last update",
+            "add/remove",
+            "collection quantity",
+            "visual view",
+            "deck view",
+            "arena export",
+            "tools & download",
+            "copy to clipboard",
+            "magic online format",
+            "apprentice and mws",
+        )
+
+        for marker in bad_markers:
+            if marker in lower_line:
+                return False
+
+        bad_values = {
+            "image",
+            "visual view",
+            "deck view",
+            "arena export",
+            "tools & download",
+            "copy to clipboard",
+            "magic online format",
+            "apprentice and mws .dec",
+            "quantity",
+            "collection",
+            "deck",
+            "sideboard",
+        }
+
+        if lower_line in bad_values:
+            return False
+
+        if re.fullmatch(r"[CURM]", line):
+            return False
+
+        return True
 
     def _is_stop_line(self, line):
         lower_line = line.lower()
@@ -363,11 +595,53 @@ class MTGDecksProvider(BaseProvider):
             "export & save",
             "embedding code",
             "hover a card",
+            "hover a card name",
             "report deck error",
             "last update",
+            "if you find any error",
+            "layout footer",
+            "never miss important",
+            "add/remove card to collection",
+            "collection quantity",
+            "magic online format",
+            "apprentice and mws",
+            "arena export",
+            "visual view",
+            "list view",
+            "tools & download",
         )
 
         return any(marker in lower_line for marker in stop_markers)
+
+    def _html_to_lines(self, html):
+        soup = BeautifulSoup(html, "html.parser")
+
+        return [
+            self._clean_text(line)
+            for line in soup.get_text("\n", strip=True).splitlines()
+            if self._clean_text(line)
+        ]
+
+    def _find_export_marker_index(self, lines):
+        for index, line in enumerate(lines):
+            lower_line = line.lower()
+
+            if "copy to clipboard and import" in lower_line:
+                return index
+
+        return None
+
+    def _find_deck_marker_index(self, lines, start_index):
+        for index in range(start_index, len(lines)):
+            line = lines[index].strip().lower()
+
+            if line == "deck":
+                return index
+
+            if self._is_stop_line(lines[index]):
+                return None
+
+        return None
 
     # ======================================================
     # Helpers
@@ -427,12 +701,30 @@ class MTGDecksProvider(BaseProvider):
     def _normalize_url(self, url):
         url = str(url).strip()
 
-        if url.startswith("http://") or url.startswith("https://"):
-            return url
+        if not url:
+            raise ValueError("Пустая ссылка MTGDecks")
 
-        return urljoin(
-            self.BASE_URL,
-            url,
+        lower_url = url.lower()
+
+        marker = "mtgdecks.net"
+
+        if marker in lower_url:
+            marker_index = lower_url.find(marker)
+
+            clean_part = url[marker_index:]
+
+            clean_part = clean_part.lstrip("/")
+
+            return f"https://{clean_part}"
+
+        if url.startswith("/"):
+            return urljoin(
+                self.BASE_URL,
+                url,
+            )
+
+        raise ValueError(
+            "Некорректная ссылка MTGDecks. " "Ссылка должна содержать mtgdecks.net"
         )
 
     def _get_html(self, url):

@@ -3,7 +3,6 @@ import threading
 import customtkinter as ctk
 
 from tkinter import filedialog
-from utils.text_shortcuts import bind_text_shortcuts
 
 from analyzer.deck_analyzer import DeckAnalyzer
 from api.scryfall import get_card
@@ -17,6 +16,7 @@ from gui.status_bar import StatusBar
 from importers.import_manager import ImportManager
 from providers.mtgdecks_provider import MTGDecksProvider
 from services.image_service import load_card_image
+from utils.text_shortcuts import bind_text_shortcuts
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -42,7 +42,7 @@ class App(ctk.CTk):
         super().__init__()
 
         self.title("MTG AI Analyzer")
-        self.geometry("1800x850")
+        self.geometry("1850x900")
 
         self.paste_window = None
 
@@ -75,6 +75,22 @@ class App(ctk.CTk):
             command=self.open_paste_deck_window,
         )
         self.paste_deck_button.pack(side="left", padx=10, pady=10)
+
+        self.mtgdecks_url_entry = ctk.CTkEntry(
+            self.top_panel,
+            width=360,
+            placeholder_text="Ссылка MTGDecks...",
+        )
+        self.mtgdecks_url_entry.pack(side="left", padx=10, pady=10)
+
+        bind_text_shortcuts(self.mtgdecks_url_entry)
+
+        self.load_mtgdecks_button = ctk.CTkButton(
+            self.top_panel,
+            text="Загрузить URL",
+            command=self.load_mtgdecks_url,
+        )
+        self.load_mtgdecks_button.pack(side="left", padx=10, pady=10)
 
         self.meta_format_combo = ctk.CTkComboBox(
             self.top_panel,
@@ -257,7 +273,6 @@ class App(ctk.CTk):
             pady=10,
         )
 
-        # Подключаем горячие клавиши
         bind_text_shortcuts(self.paste_textbox)
 
         buttons_panel = ctk.CTkFrame(self.paste_window)
@@ -314,11 +329,24 @@ Sideboard
         if self.paste_window is not None and self.paste_window.winfo_exists():
             self.paste_window.destroy()
 
+    def load_mtgdecks_url(self):
+        url = self.mtgdecks_url_entry.get().strip()
+
+        if not url:
+            self.status.label.configure(text="Вставь ссылку MTGDecks")
+            return
+
+        self.analyze_deck_source(
+            url,
+            success_prefix="Колода загружена с MTGDecks.",
+        )
+
     def analyze_deck_source(self, source, success_prefix):
         self.status.label.configure(text="Загрузка и анализ колоды...")
 
         self.open_deck_button.configure(state="disabled")
         self.paste_deck_button.configure(state="disabled")
+        self.load_mtgdecks_button.configure(state="disabled")
 
         self._run_background(
             target=self._analyze_deck_worker,
@@ -352,6 +380,7 @@ Sideboard
 
         self.open_deck_button.configure(state="normal")
         self.paste_deck_button.configure(state="normal")
+        self.load_mtgdecks_button.configure(state="normal")
 
         self.status.label.configure(
             text=(
@@ -367,6 +396,7 @@ Sideboard
 
         self.open_deck_button.configure(state="normal")
         self.paste_deck_button.configure(state="normal")
+        self.load_mtgdecks_button.configure(state="normal")
 
         self.status.label.configure(text="Ошибка загрузки колоды")
 
