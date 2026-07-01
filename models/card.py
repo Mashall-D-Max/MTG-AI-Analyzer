@@ -1,22 +1,33 @@
 class Card:
+    """
+    Модель карты Magic: The Gathering.
+    """
 
     def __init__(self, data):
 
-        self.name = data.get("name")
-        self.mana_cost = data.get("mana_cost")
-        self.type_line = data.get("type_line")
-        self.oracle_text = data.get("oracle_text")
-        self.rarity = data.get("rarity")
-        self.set_name = data.get("set_name")
-        self.artist = data.get("artist")
+        self.name = data.get("name") or ""
 
-        self.colors = data.get("colors", [])
-        self.cmc = data.get("cmc")
+        self.mana_cost = data.get("mana_cost") or ""
 
-        self.prices = data.get("prices", {})
-        self.legalities = data.get("legalities", {})
+        self.type_line = data.get("type_line") or ""
 
-        self.image_uris = data.get("image_uris", {})
+        self.oracle_text = data.get("oracle_text") or ""
+
+        self.rarity = data.get("rarity") or ""
+
+        self.set_name = data.get("set_name") or ""
+
+        self.artist = data.get("artist") or ""
+
+        self.colors = data.get("colors") or []
+
+        self.cmc = data.get("cmc") or 0
+
+        self.prices = data.get("prices") or {}
+
+        self.legalities = data.get("legalities") or {}
+
+        self.image_uris = data.get("image_uris") or {}
 
     def show(self):
 
@@ -29,7 +40,10 @@ class Card:
         print(f"Редкость       : {self.rarity}")
         print(f"Сет            : {self.set_name}")
         print(f"CMC            : {self.cmc}")
-        print(f"Цвета          : {', '.join(self.colors) if self.colors else 'Бесцветная'}")
+        print(
+            f"Цвета          : "
+            f"{', '.join(self.colors) if self.colors else 'Бесцветная'}"
+        )
 
         print("\nOracle Text")
         print("-" * 60)
@@ -38,7 +52,13 @@ class Card:
         print("\nЛегальность")
         print("-" * 60)
 
-        for format_name in ["standard", "pioneer", "modern", "legacy", "commander"]:
+        for format_name in [
+            "standard",
+            "pioneer",
+            "modern",
+            "legacy",
+            "commander",
+        ]:
             status = self.legalities.get(format_name, "unknown")
             print(f"{format_name.capitalize():12}: {status}")
 
