@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -6,6 +7,7 @@ from bs4 import BeautifulSoup
 from config import REQUEST_TIMEOUT, USER_AGENT
 from meta.archetype import Archetype
 from meta.meta_snapshot import MetaSnapshot
+from parsers.decklist_parser import DecklistParser
 from providers.base_provider import BaseProvider
 
 
@@ -13,11 +15,11 @@ class MTGDecksProvider(BaseProvider):
     """
     Provider для работы с mtgdecks.net.
 
-    Первая версия:
-    - строит URL для форматов;
-    - скачивает HTML;
-    - парсит meta snapshot из HTML;
-    - возвращает данные в наших внутренних моделях.
+    Возможности:
+    - загрузка страницы меты формата;
+    - парсинг MetaSnapshot;
+    - загрузка конкретной decklist-страницы;
+    - преобразование decklist-страницы в Deck.
     """
 
     BASE_URL = "https://mtgdecks.net"
@@ -33,9 +35,32 @@ class MTGDecksProvider(BaseProvider):
         "pauper": "Pauper",
     }
 
+    CARD_TYPES = (
+        "Creature",
+        "Instant",
+        "Sorcery",
+        "Artifact",
+        "Enchantment",
+        "Planeswalker",
+        "Battle",
+        "Land",
+    )
+
     PERCENT_PATTERN = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 
     LINE_META_PATTERN = re.compile(r"^(.+?)[\-\—\|]\s*(\d+(?:[.,]\d+)?)\s*%")
+
+    SECTION_PATTERN = re.compile(
+        r"^(Creature|Instant|Sorcery|Artifact|Enchantment|Planeswalker|Battle|Land)\s+\[\d+\]$",
+        re.IGNORECASE,
+    )
+
+    SIDEBOARD_PATTERN = re.compile(
+        r"^Sideboard\s+\[\d+\]$",
+        re.IGNORECASE,
+    )
+
+    CARD_LINE_PATTERN = re.compile(r"^(\d+)\s+(.+)$")
 
     @property
     def name(self):
@@ -77,6 +102,10 @@ class MTGDecksProvider(BaseProvider):
 
         return f"{self.BASE_URL}/{normalized}/winrates"
 
+    # ======================================================
+    # Meta
+    # ======================================================
+
     def get_meta(self, format_name):
         url = self.build_format_url(format_name)
 
@@ -98,15 +127,6 @@ class MTGDecksProvider(BaseProvider):
         return self._get_html(url)
 
     def parse_meta_html(self, html, format_name):
-        """
-        Парсит HTML страницы меты.
-
-        На первом этапе используем best-effort парсер:
-        - сначала ищем строки таблиц;
-        - потом пробуем искать строки вида:
-          Archetype — 14%
-        """
-
         normalized_format = self.normalize_format_name(format_name)
 
         snapshot = MetaSnapshot(
@@ -191,6 +211,168 @@ class MTGDecksProvider(BaseProvider):
                 )
             )
 
+    # ======================================================
+    # Deck loading
+    # ======================================================
+
+    def get_deck(self, url):
+        """
+        Загрузить конкретную колоду с MTGDecks URL.
+        """
+
+        normalized_url = self._normalize_url(url)
+
+        html = self._get_html(normalized_url)
+
+        return self.parse_deck_html(html)
+
+    def parse_deck_html(self, html):
+        """
+        Преобразовать HTML страницы MTGDecks decklist в Deck.
+        """
+
+        deck_text = self.extract_deck_text(html)
+
+        if not deck_text:
+            raise RuntimeError("Не удалось найти decklist на странице MTGDecks")
+
+        return DecklistParser().parse_text(deck_text)
+
+    def extract_deck_text(self, html):
+        """
+        Извлекает decklist из HTML.
+
+        Сначала пытаемся вытащить структурированный список:
+        Creature [..], Instant [..], Land [..], Sideboard [..].
+
+        Возвращаем текст в формате:
+
+        Deck
+        4 Fatal Push
+        ...
+        Sideboard
+        2 Duress
+        """
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        lines = [
+            self._clean_text(line)
+            for line in soup.get_text("\n", strip=True).splitlines()
+        ]
+
+        result = ["Deck"]
+
+        in_deck_section = False
+        in_sideboard = False
+        found_cards = False
+
+        for line in lines:
+            if not line:
+                continue
+
+            if self._is_stop_line(line):
+                if found_cards:
+                    break
+
+            if self.SECTION_PATTERN.match(line):
+                in_deck_section = True
+                continue
+
+            if self.SIDEBOARD_PATTERN.match(line):
+                in_deck_section = True
+                in_sideboard = True
+                result.append("Sideboard")
+                continue
+
+            if not in_deck_section:
+                continue
+
+            parsed = self._parse_mtgdecks_card_line(line)
+
+            if parsed is None:
+                continue
+
+            quantity, card_name = parsed
+
+            if not card_name:
+                continue
+
+            result.append(f"{quantity} {card_name}")
+
+            found_cards = True
+
+        if not found_cards:
+            return ""
+
+        return "\n".join(result)
+
+    def _parse_mtgdecks_card_line(self, line):
+        match = self.CARD_LINE_PATTERN.match(line)
+
+        if not match:
+            return None
+
+        quantity_text = match.group(1)
+        rest = match.group(2)
+
+        try:
+            quantity = int(quantity_text)
+        except ValueError:
+            return None
+
+        card_name = self._clean_card_name_from_row(rest)
+
+        if not card_name:
+            return None
+
+        return quantity, card_name
+
+    def _clean_card_name_from_row(self, text):
+        text = self._clean_text(text)
+
+        if " $" in text:
+            text = text.split(" $", 1)[0]
+
+        text = re.sub(
+            r"\s+[CURM]\s*$",
+            "",
+            text,
+        )
+
+        text = self._clean_text(text)
+
+        bad_values = {
+            "Image",
+            "Visual view",
+            "List view",
+            "Copy to clipboard",
+        }
+
+        if text in bad_values:
+            return ""
+
+        return text
+
+    def _is_stop_line(self, line):
+        lower_line = line.lower()
+
+        stop_markers = (
+            "buy this deck",
+            "deck tools",
+            "export & save",
+            "embedding code",
+            "hover a card",
+            "report deck error",
+            "last update",
+        )
+
+        return any(marker in lower_line for marker in stop_markers)
+
+    # ======================================================
+    # Helpers
+    # ======================================================
+
     def _extract_archetype_name_from_cells(self, cells):
         for cell in cells:
             clean_cell = self._clean_text(cell)
@@ -241,6 +423,17 @@ class MTGDecksProvider(BaseProvider):
 
     def _clean_text(self, text):
         return " ".join(str(text).split()).strip()
+
+    def _normalize_url(self, url):
+        url = str(url).strip()
+
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+
+        return urljoin(
+            self.BASE_URL,
+            url,
+        )
 
     def _get_html(self, url):
         response = requests.get(
