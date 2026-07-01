@@ -438,7 +438,7 @@ Sideboard
         try:
             reference_deck = ImportManager().load(url)
 
-            comparison = MetaCompare().compare_decks(
+            comparison = MetaCompare().compare_all_zones(
                 user_deck,
                 reference_deck,
             )

@@ -65,15 +65,75 @@ class MetaPanel(ctk.CTkFrame):
     ):
         self.text.delete("1.0", "end")
 
-        similarity = comparison.get("similarity", 0)
+        if "mainboard" in comparison:
+            self._show_full_compare_result(
+                comparison=comparison,
+                user_deck=user_deck,
+                reference_deck=reference_deck,
+            )
+            return
 
-        missing_cards = comparison.get("missing_cards", {})
-        extra_cards = comparison.get("extra_cards", {})
-        matched_cards = comparison.get("matched_cards", {})
+        self._show_single_compare_result(
+            title="Mainboard",
+            comparison=comparison,
+            user_deck=user_deck,
+            reference_deck=reference_deck,
+        )
+
+    def _show_full_compare_result(
+        self,
+        comparison,
+        user_deck=None,
+        reference_deck=None,
+    ):
+        mainboard = comparison.get("mainboard", {})
+        sideboard = comparison.get("sideboard", {})
+        overall = comparison.get("overall", {})
 
         self._write("=== Meta Compare ===\n\n")
 
-        self._write("Сравнение пока выполняется только по mainboard.\n\n")
+        if user_deck is not None:
+            self._write(
+                f"Твоя колода       : "
+                f"{user_deck.mainboard_size} main / "
+                f"{user_deck.sideboard_size} side\n"
+            )
+
+        if reference_deck is not None:
+            self._write(
+                f"Эталонная колода  : "
+                f"{reference_deck.mainboard_size} main / "
+                f"{reference_deck.sideboard_size} side\n"
+            )
+
+        self._write("\n")
+
+        self._write(f"Overall similarity  : {overall.get('similarity', 0)}%\n")
+        self._write(f"Mainboard similarity: {mainboard.get('similarity', 0)}%\n")
+        self._write(f"Sideboard similarity: {sideboard.get('similarity', 0)}%\n")
+
+        self._write("\n")
+        self._write("=" * 40)
+        self._write("\n\n")
+
+        self._write("### MAINBOARD ###\n\n")
+        self._write_compare_block(mainboard)
+
+        self._write("\n")
+        self._write("=" * 40)
+        self._write("\n\n")
+
+        self._write("### SIDEBOARD ###\n\n")
+        self._write_compare_block(sideboard)
+
+    def _show_single_compare_result(
+        self,
+        title,
+        comparison,
+        user_deck=None,
+        reference_deck=None,
+    ):
+        self._write(f"=== Meta Compare: {title} ===\n\n")
 
         if user_deck is not None:
             self._write(f"Твоя колода       : {user_deck.mainboard_size} карт\n")
@@ -82,10 +142,16 @@ class MetaPanel(ctk.CTkFrame):
             self._write(f"Эталонная колода  : {reference_deck.mainboard_size} карт\n")
 
         self._write("\n")
+        self._write(f"Совпадение: {comparison.get('similarity', 0)}%\n\n")
 
-        self._write(f"Совпадение: {similarity}%\n")
+        self._write_compare_block(comparison)
 
-        self._write("\n=== Не хватает ===\n\n")
+    def _write_compare_block(self, comparison):
+        missing_cards = comparison.get("missing_cards", {})
+        extra_cards = comparison.get("extra_cards", {})
+        matched_cards = comparison.get("matched_cards", {})
+
+        self._write("=== Не хватает ===\n\n")
 
         if not missing_cards:
             self._write("Ничего не не хватает.\n")
