@@ -29,7 +29,11 @@ class DeckAnalyzer:
 
         return {
             "size": self.deck.size,
+            "mainboard_size": self.deck.mainboard_size,
+            "sideboard_size": self.deck.sideboard_size,
+            "total_size": self.deck.total_size,
             "unique_cards": self.deck.unique_cards,
+            "unique_sideboard_cards": self.deck.unique_sideboard_cards,
             "mana_curve": mana_curve,
             "colors": colors,
             "card_types": card_types,
