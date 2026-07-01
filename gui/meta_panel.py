@@ -118,14 +118,22 @@ class MetaPanel(ctk.CTkFrame):
         self._write("\n\n")
 
         self._write("### MAINBOARD ###\n\n")
-        self._write_compare_block(mainboard)
+        self._write_compare_block(
+            comparison=mainboard,
+            user_deck_cards=user_deck.cards if user_deck else None,
+            reference_deck_cards=reference_deck.cards if reference_deck else None,
+        )
 
         self._write("\n")
         self._write("=" * 40)
         self._write("\n\n")
 
         self._write("### SIDEBOARD ###\n\n")
-        self._write_compare_block(sideboard)
+        self._write_compare_block(
+            comparison=sideboard,
+            user_deck_cards=user_deck.sideboard if user_deck else None,
+            reference_deck_cards=reference_deck.sideboard if reference_deck else None,
+        )
 
     def _show_single_compare_result(
         self,
@@ -145,9 +153,18 @@ class MetaPanel(ctk.CTkFrame):
         self._write("\n")
         self._write(f"Совпадение: {comparison.get('similarity', 0)}%\n\n")
 
-        self._write_compare_block(comparison)
+        self._write_compare_block(
+            comparison=comparison,
+            user_deck_cards=user_deck.cards if user_deck else None,
+            reference_deck_cards=reference_deck.cards if reference_deck else None,
+        )
 
-    def _write_compare_block(self, comparison):
+    def _write_compare_block(
+        self,
+        comparison,
+        user_deck_cards=None,
+        reference_deck_cards=None,
+    ):
         missing_cards = comparison.get("missing_cards", {})
         extra_cards = comparison.get("extra_cards", {})
         matched_cards = comparison.get("matched_cards", {})
@@ -170,47 +187,34 @@ class MetaPanel(ctk.CTkFrame):
 
         self._write("\n=== Совпало ===\n\n")
 
-        self._write("\n=== Рекомендации по заменам ===\n\n")
-        recommendations = CompareAdvisor().build_recommendations(comparison)
-
-        if not recommendations:
-            self._write("Рекомендаций по заменам нет.\n")
-            return
-
-        for recommendation in recommendations:
-            self._write(
-                f"Убрать {recommendation['quantity']} "
-                f"{recommendation['remove']} -> "
-                f"добавить {recommendation['quantity']} "
-                f"{recommendation['add']}\n"
-            )
-
         if not matched_cards:
             self._write("Совпадений нет.\n")
         else:
             for card_name, quantity in sorted(matched_cards.items()):
                 self._write(f"{quantity} {card_name}\n")
 
-    def show_loading(self, format_name):
-        self.text.delete("1.0", "end")
+        self._write("\n=== Рекомендации по заменам ===\n\n")
 
-        self._write("Загрузка меты...\n\n")
-        self._write(f"Формат: {format_name}\n")
+        recommendations = CompareAdvisor().build_recommendations(
+            comparison=comparison,
+            user_deck_cards=user_deck_cards,
+            reference_deck_cards=reference_deck_cards,
+        )
 
-    def show_compare_loading(self):
-        self.text.delete("1.0", "end")
+        if not recommendations:
+            self._write("Рекомендаций по заменам нет.\n")
+            return
 
-        self._write("Сравнение колод...\n\n")
-        self._write("Загружаю эталонную колоду с MTGDecks и сравниваю с текущей.\n")
+        for recommendation in recommendations:
+            mana_change = recommendation.get(
+                "mana_change",
+                "мана: нет данных",
+            )
 
-    def show_error(self, message):
-        self.text.delete("1.0", "end")
-
-        self._write("Ошибка\n\n")
-        self._write(str(message))
-
-    def clear(self):
-        self.text.delete("1.0", "end")
-
-    def _write(self, text):
-        self.text.insert("end", text)
+            self._write(
+                f"Убрать {recommendation['quantity']} "
+                f"{recommendation['remove']} -> "
+                f"добавить {recommendation['quantity']} "
+                f"{recommendation['add']} | "
+                f"{mana_change}\n"
+            )

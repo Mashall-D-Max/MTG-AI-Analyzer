@@ -106,6 +106,7 @@ class MetaCompare:
 
         for deck_card in deck_cards:
             card_name = deck_card.card.name
+
             result[card_name] = result.get(card_name, 0) + deck_card.quantity
 
         return result
@@ -119,7 +120,11 @@ class MetaCompare:
 
         for card_name, meta_quantity in meta_cards.items():
             user_quantity = user_cards.get(card_name, 0)
-            matched += min(user_quantity, meta_quantity)
+
+            matched += min(
+                user_quantity,
+                meta_quantity,
+            )
 
         return round(
             (matched / total) * 100,
