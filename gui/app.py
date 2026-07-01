@@ -88,6 +88,8 @@ class App(ctk.CTk):
             side="bottom",
         )
 
+        self._set_deck_buttons_state("normal")
+
     # ======================================================
     # UI: Search tab
     # ======================================================
@@ -601,6 +603,10 @@ Sideboard
             self.status.label.configure(text="Вставь ссылку MTGDecks для сравнения")
             return
 
+        self.last_reference_deck = None
+        self.last_comparison = None
+        self.last_upgraded_deck_text = None
+
         self.tabs.set("Мета / Compare")
 
         self.meta_panel.show_compare_loading()
@@ -695,6 +701,8 @@ Sideboard
 
         self.meta_panel.show_upgraded_deck_text(deck_text)
 
+        self._update_action_button_states()
+
         self.status.label.configure(text="Обновлённая колода сформирована")
 
     def save_upgraded_deck(self):
@@ -787,9 +795,30 @@ Sideboard
         self.open_deck_button.configure(state=state)
         self.paste_deck_button.configure(state=state)
         self.load_mtgdecks_button.configure(state=state)
-        self.compare_mtgdecks_button.configure(state=state)
-        self.build_upgraded_deck_button.configure(state=state)
-        self.save_upgraded_deck_button.configure(state=state)
+
+        if state == "disabled":
+            self.compare_mtgdecks_button.configure(state="disabled")
+            self.build_upgraded_deck_button.configure(state="disabled")
+            self.save_upgraded_deck_button.configure(state="disabled")
+            return
+
+        self._update_action_button_states()
+
+    def _update_action_button_states(self):
+        if self.current_deck is None:
+            self.compare_mtgdecks_button.configure(state="disabled")
+        else:
+            self.compare_mtgdecks_button.configure(state="normal")
+
+        if self.last_reference_deck is None or self.last_comparison is None:
+            self.build_upgraded_deck_button.configure(state="disabled")
+        else:
+            self.build_upgraded_deck_button.configure(state="normal")
+
+        if not self.last_upgraded_deck_text:
+            self.save_upgraded_deck_button.configure(state="disabled")
+        else:
+            self.save_upgraded_deck_button.configure(state="normal")
 
     def _run_background(self, target, args=None):
         if args is None:
