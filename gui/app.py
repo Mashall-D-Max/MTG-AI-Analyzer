@@ -17,6 +17,7 @@ from importers.import_manager import ImportManager
 from meta.deck_upgrade_builder import DeckUpgradeBuilder
 from meta.meta_compare import MetaCompare
 from providers.mtgdecks_provider import MTGDecksProvider
+from services.deck_export_service import DeckExportService
 from services.image_service import load_card_image
 from utils.text_shortcuts import bind_text_shortcuts
 
@@ -27,6 +28,11 @@ ctk.set_default_color_theme("blue")
 class App(ctk.CTk):
     """
     Главное окно приложения.
+
+    Интерфейс разбит на вкладки:
+    - Поиск карт
+    - Колода
+    - Мета / Compare
     """
 
     META_FORMATS = [
@@ -44,11 +50,13 @@ class App(ctk.CTk):
         super().__init__()
 
         self.title("MTG AI Analyzer")
-        self.geometry("1850x900")
+        self.geometry("1500x900")
+        self.minsize(1200, 750)
 
         self.current_deck = None
         self.last_reference_deck = None
         self.last_comparison = None
+        self.last_upgraded_deck_text = None
         self.paste_window = None
 
         self.title_label = ctk.CTkLabel(
@@ -56,128 +64,268 @@ class App(ctk.CTk):
             text="MTG AI Analyzer",
             font=("Arial", 30, "bold"),
         )
-        self.title_label.pack(pady=15)
+        self.title_label.pack(pady=12)
 
-        self.top_panel = ctk.CTkFrame(self)
-        self.top_panel.pack(fill="x", padx=20)
-
-        self.search_panel = SearchPanel(
-            self.top_panel,
-            self.search_card,
-        )
-        self.search_panel.pack(side="left", padx=10, pady=10)
-
-        self.open_deck_button = ctk.CTkButton(
-            self.top_panel,
-            text="Открыть колоду",
-            command=self.open_deck_file,
-        )
-        self.open_deck_button.pack(side="left", padx=10, pady=10)
-
-        self.paste_deck_button = ctk.CTkButton(
-            self.top_panel,
-            text="Вставить колоду",
-            command=self.open_paste_deck_window,
-        )
-        self.paste_deck_button.pack(side="left", padx=10, pady=10)
-
-        self.mtgdecks_url_entry = ctk.CTkEntry(
-            self.top_panel,
-            width=360,
-            placeholder_text="URL MTGDecks...",
-        )
-        self.mtgdecks_url_entry.pack(side="left", padx=10, pady=10)
-
-        bind_text_shortcuts(self.mtgdecks_url_entry)
-
-        self.load_mtgdecks_button = ctk.CTkButton(
-            self.top_panel,
-            text="Загрузить URL",
-            command=self.load_mtgdecks_url,
-        )
-        self.load_mtgdecks_button.pack(side="left", padx=5, pady=10)
-
-        self.compare_mtgdecks_button = ctk.CTkButton(
-            self.top_panel,
-            text="Сравнить с URL",
-            command=self.compare_mtgdecks_url,
-        )
-        self.compare_mtgdecks_button.pack(side="left", padx=5, pady=10)
-
-        self.build_upgraded_deck_button = ctk.CTkButton(
-            self.top_panel,
-            text="Сформировать колоду",
-            command=self.build_upgraded_deck,
-        )
-        self.build_upgraded_deck_button.pack(side="left", padx=5, pady=10)
-
-        self.meta_format_combo = ctk.CTkComboBox(
-            self.top_panel,
-            values=self.META_FORMATS,
-            width=150,
-            state="readonly",
-        )
-        self.meta_format_combo.set("Pioneer")
-        self.meta_format_combo.pack(side="left", padx=10, pady=10)
-
-        self.load_meta_button = ctk.CTkButton(
-            self.top_panel,
-            text="Загрузить мету",
-            command=self.load_selected_meta,
-        )
-        self.load_meta_button.pack(side="left", padx=10, pady=10)
-
-        self.center = ctk.CTkFrame(self)
-        self.center.pack(
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.pack(
             fill="both",
             expand=True,
-            padx=20,
-            pady=20,
+            padx=15,
+            pady=(0, 10),
         )
 
-        self.image_panel = ImagePanel(self.center)
-        self.image_panel.pack(
-            side="left",
-            fill="y",
-            padx=10,
-        )
+        self.search_tab = self.tabs.add("Поиск карт")
+        self.deck_tab = self.tabs.add("Колода")
+        self.meta_tab = self.tabs.add("Мета / Compare")
 
-        self.card_panel = CardPanel(self.center)
-        self.card_panel.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=10,
-        )
-
-        self.deck_list_panel = DeckListPanel(self.center)
-        self.deck_list_panel.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=10,
-        )
-
-        self.deck_analysis_panel = DeckAnalysisPanel(self.center)
-        self.deck_analysis_panel.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=10,
-        )
-
-        self.meta_panel = MetaPanel(self.center)
-        self.meta_panel.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=10,
-        )
+        self._build_search_tab()
+        self._build_deck_tab()
+        self._build_meta_tab()
 
         self.status = StatusBar(self)
         self.status.pack(
             fill="x",
             side="bottom",
+        )
+
+    # ======================================================
+    # UI: Search tab
+    # ======================================================
+
+    def _build_search_tab(self):
+        top_panel = ctk.CTkFrame(self.search_tab)
+        top_panel.pack(
+            fill="x",
+            padx=10,
+            pady=10,
+        )
+
+        self.search_panel = SearchPanel(
+            top_panel,
+            self.search_card,
+        )
+        self.search_panel.pack(
+            side="left",
+            padx=10,
+            pady=10,
+        )
+
+        content = ctk.CTkFrame(self.search_tab)
+        content.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+        self.image_panel = ImagePanel(content)
+        self.image_panel.pack(
+            side="left",
+            fill="y",
+            padx=10,
+            pady=10,
+        )
+
+        self.card_panel = CardPanel(content)
+        self.card_panel.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+    # ======================================================
+    # UI: Deck tab
+    # ======================================================
+
+    def _build_deck_tab(self):
+        top_panel = ctk.CTkFrame(self.deck_tab)
+        top_panel.pack(
+            fill="x",
+            padx=10,
+            pady=10,
+        )
+
+        self.open_deck_button = ctk.CTkButton(
+            top_panel,
+            text="Открыть колоду",
+            command=self.open_deck_file,
+            width=150,
+        )
+        self.open_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        self.paste_deck_button = ctk.CTkButton(
+            top_panel,
+            text="Вставить колоду",
+            command=self.open_paste_deck_window,
+            width=150,
+        )
+        self.paste_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        self.deck_mtgdecks_url_entry = ctk.CTkEntry(
+            top_panel,
+            width=460,
+            placeholder_text="URL MTGDecks для загрузки колоды...",
+        )
+        self.deck_mtgdecks_url_entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=8,
+            pady=10,
+        )
+
+        bind_text_shortcuts(self.deck_mtgdecks_url_entry)
+
+        self.load_mtgdecks_button = ctk.CTkButton(
+            top_panel,
+            text="Загрузить URL",
+            command=self.load_mtgdecks_url,
+            width=140,
+        )
+        self.load_mtgdecks_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        content = ctk.CTkFrame(self.deck_tab)
+        content.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+        self.deck_list_panel = DeckListPanel(content)
+        self.deck_list_panel.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+        self.deck_analysis_panel = DeckAnalysisPanel(content)
+        self.deck_analysis_panel.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+    # ======================================================
+    # UI: Meta tab
+    # ======================================================
+
+    def _build_meta_tab(self):
+        top_panel = ctk.CTkFrame(self.meta_tab)
+        top_panel.pack(
+            fill="x",
+            padx=10,
+            pady=10,
+        )
+
+        self.meta_format_combo = ctk.CTkComboBox(
+            top_panel,
+            values=self.META_FORMATS,
+            width=150,
+            state="readonly",
+        )
+        self.meta_format_combo.set("Pioneer")
+        self.meta_format_combo.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        self.load_meta_button = ctk.CTkButton(
+            top_panel,
+            text="Загрузить мету",
+            command=self.load_selected_meta,
+            width=150,
+        )
+        self.load_meta_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        self.compare_mtgdecks_url_entry = ctk.CTkEntry(
+            top_panel,
+            width=460,
+            placeholder_text="URL MTGDecks для сравнения...",
+        )
+        self.compare_mtgdecks_url_entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=8,
+            pady=10,
+        )
+
+        bind_text_shortcuts(self.compare_mtgdecks_url_entry)
+
+        self.compare_mtgdecks_button = ctk.CTkButton(
+            top_panel,
+            text="Сравнить с URL",
+            command=self.compare_mtgdecks_url,
+            width=150,
+        )
+        self.compare_mtgdecks_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        self.build_upgraded_deck_button = ctk.CTkButton(
+            top_panel,
+            text="Сформировать колоду",
+            command=self.build_upgraded_deck,
+            width=180,
+        )
+        self.build_upgraded_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        self.save_upgraded_deck_button = ctk.CTkButton(
+            top_panel,
+            text="Сохранить колоду",
+            command=self.save_upgraded_deck,
+            width=170,
+        )
+        self.save_upgraded_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
+        content = ctk.CTkFrame(self.meta_tab)
+        content.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+        self.meta_panel = MetaPanel(content)
+        self.meta_panel.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
         )
 
     # ======================================================
@@ -190,6 +338,8 @@ class App(ctk.CTk):
         if not card_name:
             self.status.label.configure(text="Введите название карты")
             return
+
+        self.tabs.set("Поиск карт")
 
         self.status.label.configure(text=f"Загрузка карты: {card_name}")
 
@@ -265,7 +415,7 @@ class App(ctk.CTk):
 
         self.paste_window = ctk.CTkToplevel(self)
         self.paste_window.title("Вставить колоду")
-        self.paste_window.geometry("700x600")
+        self.paste_window.geometry("750x620")
 
         title = ctk.CTkLabel(
             self.paste_window,
@@ -282,8 +432,8 @@ class App(ctk.CTk):
 
         self.paste_textbox = ctk.CTkTextbox(
             self.paste_window,
-            width=650,
-            height=400,
+            width=700,
+            height=420,
         )
         self.paste_textbox.pack(
             fill="both",
@@ -295,28 +445,41 @@ class App(ctk.CTk):
         bind_text_shortcuts(self.paste_textbox)
 
         buttons_panel = ctk.CTkFrame(self.paste_window)
-        buttons_panel.pack(fill="x", padx=20, pady=15)
+        buttons_panel.pack(
+            fill="x",
+            padx=20,
+            pady=15,
+        )
 
         analyze_button = ctk.CTkButton(
             buttons_panel,
             text="Анализировать",
             command=self.analyze_pasted_deck,
         )
-        analyze_button.pack(side="left", padx=10)
+        analyze_button.pack(
+            side="left",
+            padx=10,
+        )
 
         close_button = ctk.CTkButton(
             buttons_panel,
             text="Закрыть",
             command=self.paste_window.destroy,
         )
-        close_button.pack(side="left", padx=10)
+        close_button.pack(
+            side="left",
+            padx=10,
+        )
 
         example_button = ctk.CTkButton(
             buttons_panel,
             text="Вставить пример",
             command=self.insert_example_deck,
         )
-        example_button.pack(side="left", padx=10)
+        example_button.pack(
+            side="left",
+            padx=10,
+        )
 
     def insert_example_deck(self):
         example = """Deck
@@ -349,10 +512,12 @@ Sideboard
             self.paste_window.destroy()
 
     def load_mtgdecks_url(self):
-        url = self.mtgdecks_url_entry.get().strip()
+        url = self.deck_mtgdecks_url_entry.get().strip()
 
         if not url:
-            self.status.label.configure(text="Вставь ссылку MTGDecks")
+            self.status.label.configure(
+                text="Вставь ссылку MTGDecks для загрузки колоды"
+            )
             return
 
         self.analyze_deck_source(
@@ -361,6 +526,8 @@ Sideboard
         )
 
     def analyze_deck_source(self, source, success_prefix):
+        self.tabs.set("Колода")
+
         self.status.label.configure(text="Загрузка и анализ колоды...")
 
         self._set_deck_buttons_state("disabled")
@@ -396,6 +563,7 @@ Sideboard
 
         self.last_reference_deck = None
         self.last_comparison = None
+        self.last_upgraded_deck_text = None
 
         self.deck_list_panel.show_deck(deck)
         self.deck_analysis_panel.show_analysis(analysis)
@@ -427,11 +595,13 @@ Sideboard
             self.status.label.configure(text="Сначала загрузи свою колоду")
             return
 
-        url = self.mtgdecks_url_entry.get().strip()
+        url = self.compare_mtgdecks_url_entry.get().strip()
 
         if not url:
             self.status.label.configure(text="Вставь ссылку MTGDecks для сравнения")
             return
+
+        self.tabs.set("Мета / Compare")
 
         self.meta_panel.show_compare_loading()
 
@@ -479,6 +649,7 @@ Sideboard
     ):
         self.last_comparison = comparison
         self.last_reference_deck = reference_deck
+        self.last_upgraded_deck_text = None
 
         self.meta_panel.show_compare_result(
             comparison=comparison,
@@ -512,15 +683,36 @@ Sideboard
             self.status.label.configure(text="Сначала выполни сравнение с MTGDecks URL")
             return
 
+        self.tabs.set("Мета / Compare")
+
         deck_text = DeckUpgradeBuilder().build_upgraded_deck_text(
             user_deck=self.current_deck,
             reference_deck=self.last_reference_deck,
             comparison=self.last_comparison,
         )
 
+        self.last_upgraded_deck_text = deck_text
+
         self.meta_panel.show_upgraded_deck_text(deck_text)
 
         self.status.label.configure(text="Обновлённая колода сформирована")
+
+    def save_upgraded_deck(self):
+        if not self.last_upgraded_deck_text:
+            self.status.label.configure(text="Сначала сформируй обновлённую колоду")
+            return
+
+        try:
+            path = DeckExportService().save_deck_text(
+                deck_text=self.last_upgraded_deck_text,
+                filename="upgraded_deck.txt",
+                folder="decks",
+            )
+
+            self.status.label.configure(text=f"Колода сохранена: {path}")
+
+        except Exception as error:
+            self.status.label.configure(text=f"Ошибка сохранения колоды: {error}")
 
     # ======================================================
     # Meta loading
@@ -532,6 +724,8 @@ Sideboard
         if not format_name:
             self.status.label.configure(text="Выбери формат меты")
             return
+
+        self.tabs.set("Мета / Compare")
 
         self.meta_panel.show_loading(format_name)
 
@@ -595,6 +789,7 @@ Sideboard
         self.load_mtgdecks_button.configure(state=state)
         self.compare_mtgdecks_button.configure(state=state)
         self.build_upgraded_deck_button.configure(state=state)
+        self.save_upgraded_deck_button.configure(state=state)
 
     def _run_background(self, target, args=None):
         if args is None:

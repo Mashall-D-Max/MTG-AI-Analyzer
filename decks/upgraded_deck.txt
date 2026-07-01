@@ -1,0 +1,32 @@
+Deck
+4 Fleeting Spirit
+3 Guardian of New Benalia
+4 Monument to Endurance
+4 Fatal Push
+4 Thoughtseize
+2 Bleachbone Verge
+4 The Mycosynth Gardens
+1 Swamp
+2 Plains
+4 Concealed Courtyard
+1 Urborg, Tomb of Yawgmoth
+4 Godless Shrine
+2 Shadowy Backstreet
+2 Brightclimb Pathway // Grimclimb Pathway
+1 Geier Reach Sanitarium
+4 Greasefang, Okiba Boss
+1 Lively Dirge
+4 Parhelion II
+1 Recommission
+4 Seasoned Hallowblade
+3 Sheltered by Ghosts
+1 Takenuma, Abandoned Mire
+
+Sideboard
+2 Seam Rip
+1 Go Blank
+3 Duress
+2 Bitter Triumph
+3 Containment Priest
+1 Exorcise
+3 Vanishing Verse
