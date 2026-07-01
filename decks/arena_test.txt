@@ -1,0 +1,9 @@
+Deck
+4 Fatal Push (MKM) 84
+4 Thoughtseize (AKR) 127
+4 Ketramose, the New Dawn (DFT) 17
+2 Plains (DMU) 277
+2 Swamp (DMU) 279
+
+Sideboard
+2 Duress (M21) 96

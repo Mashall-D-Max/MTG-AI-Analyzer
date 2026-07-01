@@ -28,18 +28,49 @@ class FormatDetector:
 
             return DeckFormat.URL
 
+        if "\n" in source_text:
+
+            lines = FormatDetector._get_non_empty_lines(source_text)
+
+            if FormatDetector._looks_like_arena(lines):
+                return DeckFormat.ARENA
+
+            return DeckFormat.CLIPBOARD
+
         path = Path(source_text)
+
+        if path.exists() and path.is_file():
+
+            try:
+
+                file_text = path.read_text(encoding="utf-8")
+
+                lines = FormatDetector._get_non_empty_lines(file_text)
+
+                if FormatDetector._looks_like_arena(lines):
+                    return DeckFormat.ARENA
+
+            except OSError:
+                pass
 
         if path.suffix.lower() == ".txt":
             return DeckFormat.TXT
 
-        lines = [line.strip() for line in source_text.splitlines() if line.strip()]
-
-        if lines:
-
-            first_line = lines[0].lower()
-
-            if first_line in ("deck", "sideboard"):
-                return DeckFormat.ARENA
-
         return DeckFormat.CLIPBOARD
+
+    @staticmethod
+    def _get_non_empty_lines(text):
+
+        return [
+            line.strip().lstrip("\ufeff") for line in text.splitlines() if line.strip()
+        ]
+
+    @staticmethod
+    def _looks_like_arena(lines):
+
+        if not lines:
+            return False
+
+        first_line = lines[0].lower()
+
+        return first_line in ("deck", "sideboard")

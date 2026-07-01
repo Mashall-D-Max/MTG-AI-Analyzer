@@ -15,6 +15,7 @@ from parsers.deck_parser import load_deck
 from services.cache_service import cache
 
 TEST_DECK_FILE = PROJECT_ROOT / "decks" / "test.txt"
+TEST_ARENA_DECK_FILE = PROJECT_ROOT / "decks" / "arena_test.txt"
 
 
 class SmokeTest:
@@ -45,6 +46,11 @@ class SmokeTest:
 
         if not TEST_DECK_FILE.exists():
             raise RuntimeError(f"Файл тестовой колоды не найден: {TEST_DECK_FILE}")
+
+    def test_arena_deck_file_exists(self):
+
+        if not TEST_ARENA_DECK_FILE.exists():
+            raise RuntimeError(f"Файл Arena-колоды не найден: {TEST_ARENA_DECK_FILE}")
 
     def test_scryfall(self):
 
@@ -118,6 +124,13 @@ class SmokeTest:
         if detected_format != DeckFormat.TXT:
             raise RuntimeError(f"Ожидался TXT, получен {detected_format}")
 
+    def test_format_detector_arena(self):
+
+        detected_format = FormatDetector.detect(TEST_ARENA_DECK_FILE)
+
+        if detected_format != DeckFormat.ARENA:
+            raise RuntimeError(f"Ожидался ARENA, получен {detected_format}")
+
     def test_format_detector_mtgdecks(self):
 
         url = "https://mtgdecks.net/Pioneer/example-decklist"
@@ -132,10 +145,23 @@ class SmokeTest:
         deck = ImportManager().load(TEST_DECK_FILE)
 
         if deck.size <= 0:
-            raise RuntimeError("ImportManager загрузил пустую колоду")
+            raise RuntimeError("ImportManager загрузил пустую TXT-колоду")
 
         if deck.unique_cards <= 0:
-            raise RuntimeError("ImportManager не загрузил уникальные карты")
+            raise RuntimeError("ImportManager не загрузил уникальные карты TXT")
+
+    def test_import_manager_arena(self):
+
+        deck = ImportManager().load(TEST_ARENA_DECK_FILE)
+
+        if deck.size <= 0:
+            raise RuntimeError("ImportManager загрузил пустую Arena-колоду")
+
+        if deck.unique_cards <= 0:
+            raise RuntimeError("ImportManager не загрузил уникальные карты Arena")
+
+        if deck.size != 16:
+            raise RuntimeError(f"Ожидалось 16 карт main deck, получено {deck.size}")
 
     def run(self):
 
@@ -145,13 +171,16 @@ class SmokeTest:
         print()
 
         self.run_check("Deck file exists", self.test_deck_file_exists)
+        self.run_check("Arena deck file exists", self.test_arena_deck_file_exists)
         self.run_check("Scryfall card loading", self.test_scryfall)
         self.run_check("Cache", self.test_cache)
         self.run_check("Deck import", self.test_deck_import)
         self.run_check("Deck analyzer", self.test_deck_analyzer)
         self.run_check("Format detector TXT", self.test_format_detector_txt)
+        self.run_check("Format detector Arena", self.test_format_detector_arena)
         self.run_check("Format detector MTGDecks", self.test_format_detector_mtgdecks)
         self.run_check("Import manager TXT", self.test_import_manager_txt)
+        self.run_check("Import manager Arena", self.test_import_manager_arena)
 
         print()
         print("=" * 60)
