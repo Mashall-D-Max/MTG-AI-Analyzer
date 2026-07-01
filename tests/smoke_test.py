@@ -12,6 +12,7 @@ from importers.deck_format import DeckFormat
 from importers.format_detector import FormatDetector
 from importers.import_manager import ImportManager
 from parsers.deck_parser import load_deck
+from parsers.decklist_parser import DecklistParser
 from services.cache_service import cache
 
 TEST_DECK_FILE = PROJECT_ROOT / "decks" / "test.txt"
@@ -27,6 +28,19 @@ CLIPBOARD_DECK_TEXT = """
 
 Sideboard
 2 Duress
+"""
+
+
+PARSER_TEST_TEXT = """
+Deck
+4 Fatal Push (MKM) 84
+4 Thoughtseize (AKR) 127
+4 Ketramose, the New Dawn (DFT) 17
+2 Plains (DMU) 277
+2 Swamp (DMU) 279
+
+Sideboard
+2 Duress (M21) 96
 """
 
 
@@ -129,6 +143,23 @@ class SmokeTest:
         if not isinstance(analysis["ai"], list):
             raise RuntimeError("ai должен быть list")
 
+    def test_decklist_parser(self):
+
+        deck = DecklistParser().parse_text(PARSER_TEST_TEXT)
+
+        if deck.mainboard_size != 16:
+            raise RuntimeError(
+                f"Ожидалось 16 карт mainboard, получено {deck.mainboard_size}"
+            )
+
+        if deck.sideboard_size != 2:
+            raise RuntimeError(
+                f"Ожидалось 2 карты sideboard, получено {deck.sideboard_size}"
+            )
+
+        if deck.total_size != 18:
+            raise RuntimeError(f"Ожидалось 18 карт всего, получено {deck.total_size}")
+
     def test_format_detector_txt(self):
 
         detected_format = FormatDetector.detect(TEST_DECK_FILE)
@@ -221,13 +252,15 @@ class SmokeTest:
         self.run_check("Cache", self.test_cache)
         self.run_check("Deck import", self.test_deck_import)
         self.run_check("Deck analyzer", self.test_deck_analyzer)
+        self.run_check("Decklist parser", self.test_decklist_parser)
         self.run_check("Format detector TXT", self.test_format_detector_txt)
         self.run_check("Format detector Arena", self.test_format_detector_arena)
         self.run_check("Format detector Clipboard", self.test_format_detector_clipboard)
         self.run_check("Format detector MTGDecks", self.test_format_detector_mtgdecks)
         self.run_check("Import manager TXT", self.test_import_manager_txt)
         self.run_check(
-            "Import manager Arena with sideboard", self.test_import_manager_arena
+            "Import manager Arena with sideboard",
+            self.test_import_manager_arena,
         )
         self.run_check(
             "Import manager Clipboard with sideboard",

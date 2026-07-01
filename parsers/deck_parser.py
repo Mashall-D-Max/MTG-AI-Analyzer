@@ -1,39 +1,17 @@
-from api.scryfall import get_card
-from models.deck import Deck
+from pathlib import Path
+
+from parsers.decklist_parser import DecklistParser
 
 
 def load_deck(filename):
     """
     Загрузить колоду из текстового файла.
+
+    Старый интерфейс сохранён для совместимости.
     """
 
-    deck = Deck()
+    path = Path(filename)
 
-    with open(filename, "r", encoding="utf-8") as file:
+    text = path.read_text(encoding="utf-8")
 
-        for line in file:
-
-            line = line.strip()
-
-            if not line:
-                continue
-
-            if line.startswith("#"):
-                continue
-
-            parts = line.split(" ", 1)
-
-            if len(parts) != 2:
-                continue
-
-            quantity = int(parts[0])
-            card_name = parts[1]
-
-            card = get_card(card_name)
-
-            if card is None:
-                continue
-
-            deck.add_card(card, quantity)
-
-    return deck
+    return DecklistParser().parse_text(text)
