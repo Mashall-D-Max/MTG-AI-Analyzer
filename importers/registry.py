@@ -1,6 +1,3 @@
-from importers.deck_format import DeckFormat
-
-
 class ImportRegistry:
     """
     Реестр всех импортеров.
@@ -17,6 +14,10 @@ class ImportRegistry:
     def get(self, deck_format):
 
         return self._importers.get(deck_format)
+
+    def registered_formats(self):
+
+        return list(self._importers.keys())
 
 
 registry = ImportRegistry()

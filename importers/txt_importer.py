@@ -1,14 +1,18 @@
 from api.scryfall import get_card
-from models.deck import Deck
-
 from importers.base_importer import BaseImporter
 from importers.deck_format import DeckFormat
 from importers.registry import registry
+from models.deck import Deck
 
 
 class TxtImporter(BaseImporter):
     """
     Импорт обычного TXT-файла.
+
+    Формат строк:
+
+    4 Fatal Push
+    2 Plains
     """
 
     def load(self, filename):
@@ -21,7 +25,10 @@ class TxtImporter(BaseImporter):
 
                 line = line.strip()
 
-                if not line or line.startswith("#"):
+                if not line:
+                    continue
+
+                if line.startswith("#"):
                     continue
 
                 parts = line.split(" ", 1)
@@ -29,15 +36,19 @@ class TxtImporter(BaseImporter):
                 if len(parts) != 2:
                     continue
 
-                quantity = int(parts[0])
+                quantity_text, card_name = parts
 
-                card_name = parts[1]
+                try:
+                    quantity = int(quantity_text)
+                except ValueError:
+                    continue
 
                 card = get_card(card_name)
 
-                if card:
+                if card is None:
+                    continue
 
-                    deck.add_card(card, quantity)
+                deck.add_card(card, quantity)
 
         return deck
 

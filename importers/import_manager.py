@@ -1,14 +1,14 @@
 from importers.format_detector import FormatDetector
 from importers.registry import registry
 
-# Импортируем, чтобы зарегистрировать импортеры
+# Импортируем модули, чтобы они зарегистрировали свои импортеры.
 import importers.txt_importer
 import importers.arena_importer
 
 
 class ImportManager:
     """
-    Универсальный менеджер импорта.
+    Универсальный менеджер импорта колод.
     """
 
     def load(self, source):
@@ -18,7 +18,8 @@ class ImportManager:
         importer = registry.get(deck_format)
 
         if importer is None:
-
-            raise ValueError(f"Импортер для {deck_format.value} не зарегистрирован.")
+            raise ValueError(
+                f"Импортер для формата '{deck_format.value}' не зарегистрирован."
+            )
 
         return importer.load(source)

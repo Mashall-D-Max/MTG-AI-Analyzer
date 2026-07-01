@@ -8,6 +8,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from analyzer.deck_analyzer import DeckAnalyzer
 from api.scryfall import get_card
+from importers.deck_format import DeckFormat
+from importers.format_detector import FormatDetector
+from importers.import_manager import ImportManager
 from parsers.deck_parser import load_deck
 from services.cache_service import cache
 
@@ -38,6 +41,21 @@ class SmokeTest:
             print(f"[FAIL] {name}")
             print(f"       {error}")
 
+    def test_deck_file_exists(self):
+
+        if not TEST_DECK_FILE.exists():
+            raise RuntimeError(f"Файл тестовой колоды не найден: {TEST_DECK_FILE}")
+
+    def test_scryfall(self):
+
+        card = get_card("Fatal Push")
+
+        if card is None:
+            raise RuntimeError("Scryfall не вернул карту")
+
+        if card.name != "Fatal Push":
+            raise RuntimeError(f"Ожидалась Fatal Push, получена {card.name}")
+
     def test_cache(self):
 
         card_name = "Fatal Push"
@@ -51,21 +69,6 @@ class SmokeTest:
 
         if not cache.exists(card_name):
             raise RuntimeError("Карта не появилась в кэше")
-
-    def test_scryfall(self):
-
-        card = get_card("Fatal Push")
-
-        if card is None:
-            raise RuntimeError("Scryfall не вернул карту")
-
-        if card.name != "Fatal Push":
-            raise RuntimeError("Загружена неправильная карта")
-
-    def test_deck_file_exists(self):
-
-        if not TEST_DECK_FILE.exists():
-            raise RuntimeError(f"Файл колоды не найден: {TEST_DECK_FILE}")
 
     def test_deck_import(self):
 
@@ -102,6 +105,38 @@ class SmokeTest:
         if analysis["size"] <= 0:
             raise RuntimeError("Размер колоды равен 0")
 
+        if not isinstance(analysis["mana_curve"], dict):
+            raise RuntimeError("mana_curve должен быть dict")
+
+        if not isinstance(analysis["ai"], list):
+            raise RuntimeError("ai должен быть list")
+
+    def test_format_detector_txt(self):
+
+        detected_format = FormatDetector.detect(TEST_DECK_FILE)
+
+        if detected_format != DeckFormat.TXT:
+            raise RuntimeError(f"Ожидался TXT, получен {detected_format}")
+
+    def test_format_detector_mtgdecks(self):
+
+        url = "https://mtgdecks.net/Pioneer/example-decklist"
+
+        detected_format = FormatDetector.detect(url)
+
+        if detected_format != DeckFormat.MTGDECKS:
+            raise RuntimeError(f"Ожидался MTGDECKS, получен {detected_format}")
+
+    def test_import_manager_txt(self):
+
+        deck = ImportManager().load(TEST_DECK_FILE)
+
+        if deck.size <= 0:
+            raise RuntimeError("ImportManager загрузил пустую колоду")
+
+        if deck.unique_cards <= 0:
+            raise RuntimeError("ImportManager не загрузил уникальные карты")
+
     def run(self):
 
         print("=" * 60)
@@ -114,6 +149,9 @@ class SmokeTest:
         self.run_check("Cache", self.test_cache)
         self.run_check("Deck import", self.test_deck_import)
         self.run_check("Deck analyzer", self.test_deck_analyzer)
+        self.run_check("Format detector TXT", self.test_format_detector_txt)
+        self.run_check("Format detector MTGDecks", self.test_format_detector_mtgdecks)
+        self.run_check("Import manager TXT", self.test_import_manager_txt)
 
         print()
         print("=" * 60)

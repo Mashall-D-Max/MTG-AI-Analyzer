@@ -11,6 +11,6 @@ class BaseImporter(ABC):
     @abstractmethod
     def load(self, source) -> Deck:
         """
-        Загрузить колоду из указанного источника.
+        Загрузить колоду из источника.
         """
         pass
