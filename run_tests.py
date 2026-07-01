@@ -1,5 +1,6 @@
-import subprocess
+import runpy
 import sys
+import traceback
 from pathlib import Path
 
 TESTS = [
@@ -8,6 +9,7 @@ TESTS = [
     "test_meta_compare_zones.py",
     "test_mana_impact_advisor.py",
     "test_deck_upgrade_builder.py",
+    "test_deck_export_service.py",
     "test_decklist_garbage_filter.py",
     "test_mtgdecks_deck_parser.py",
     "test_mtgdecks_importer.py",
@@ -27,18 +29,37 @@ def run_test(test_file):
         print(f"[ERROR] Файл теста не найден: {test_file}")
         return False
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            test_file,
-        ],
-        text=True,
-    )
+    old_argv = sys.argv[:]
 
-    if result.returncode != 0:
+    try:
+        sys.argv = [str(path)]
+
+        runpy.run_path(
+            str(path),
+            run_name="__main__",
+        )
+
+    except SystemExit as error:
+        code = error.code
+
+        if code in (0, None):
+            print()
+            print(f"[PASSED] {test_file}")
+            return True
+
         print()
         print(f"[FAILED] {test_file}")
+        print(f"SystemExit code: {code}")
         return False
+
+    except Exception:
+        print()
+        print(f"[FAILED] {test_file}")
+        traceback.print_exc()
+        return False
+
+    finally:
+        sys.argv = old_argv
 
     print()
     print(f"[PASSED] {test_file}")
