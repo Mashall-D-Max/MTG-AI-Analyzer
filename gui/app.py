@@ -26,6 +26,17 @@ class App(ctk.CTk):
     Главное окно приложения.
     """
 
+    META_FORMATS = [
+        "Standard",
+        "Pioneer",
+        "Explorer",
+        "Modern",
+        "Legacy",
+        "Vintage",
+        "Pauper",
+        "Commander",
+    ]
+
     def __init__(self):
         super().__init__()
 
@@ -64,10 +75,19 @@ class App(ctk.CTk):
         )
         self.paste_deck_button.pack(side="left", padx=10, pady=10)
 
+        self.meta_format_combo = ctk.CTkComboBox(
+            self.top_panel,
+            values=self.META_FORMATS,
+            width=160,
+            state="readonly",
+        )
+        self.meta_format_combo.set("Pioneer")
+        self.meta_format_combo.pack(side="left", padx=10, pady=10)
+
         self.load_meta_button = ctk.CTkButton(
             self.top_panel,
-            text="Загрузить мету Pioneer",
-            command=self.load_pioneer_meta,
+            text="Загрузить мету",
+            command=self.load_selected_meta,
         )
         self.load_meta_button.pack(side="left", padx=10, pady=10)
 
@@ -350,14 +370,19 @@ Sideboard
     # Meta loading
     # ======================================================
 
-    def load_pioneer_meta(self):
-        format_name = "Pioneer"
+    def load_selected_meta(self):
+        format_name = self.meta_format_combo.get()
+
+        if not format_name:
+            self.status.label.configure(text="Выбери формат меты")
+            return
 
         self.meta_panel.show_loading(format_name)
 
-        self.status.label.configure(text="Загрузка меты Pioneer...")
+        self.status.label.configure(text=f"Загрузка меты {format_name}...")
 
         self.load_meta_button.configure(state="disabled")
+        self.meta_format_combo.configure(state="disabled")
 
         self._run_background(
             target=self._load_meta_worker,
@@ -387,6 +412,7 @@ Sideboard
         self.meta_panel.show_snapshot(snapshot)
 
         self.load_meta_button.configure(state="normal")
+        self.meta_format_combo.configure(state="readonly")
 
         self.status.label.configure(
             text=(
@@ -399,6 +425,7 @@ Sideboard
         self.meta_panel.show_error(message)
 
         self.load_meta_button.configure(state="normal")
+        self.meta_format_combo.configure(state="readonly")
 
         self.status.label.configure(text="Ошибка загрузки меты")
 
