@@ -1,6 +1,7 @@
 import customtkinter as ctk
 
 from utils.text_shortcuts import bind_text_shortcuts
+from meta.compare_advisor import CompareAdvisor
 
 
 class MetaPanel(ctk.CTkFrame):
@@ -168,6 +169,21 @@ class MetaPanel(ctk.CTkFrame):
                 self._write(f"{quantity} {card_name}\n")
 
         self._write("\n=== Совпало ===\n\n")
+
+        self._write("\n=== Рекомендации по заменам ===\n\n")
+        recommendations = CompareAdvisor().build_recommendations(comparison)
+
+        if not recommendations:
+            self._write("Рекомендаций по заменам нет.\n")
+            return
+
+        for recommendation in recommendations:
+            self._write(
+                f"Убрать {recommendation['quantity']} "
+                f"{recommendation['remove']} -> "
+                f"добавить {recommendation['quantity']} "
+                f"{recommendation['add']}\n"
+            )
 
         if not matched_cards:
             self._write("Совпадений нет.\n")
