@@ -8,9 +8,11 @@ from gui.card_panel import CardPanel
 from gui.deck_analysis_panel import DeckAnalysisPanel
 from gui.deck_list_panel import DeckListPanel
 from gui.image_panel import ImagePanel
+from gui.meta_panel import MetaPanel
 from gui.search_panel import SearchPanel
 from gui.status_bar import StatusBar
 from importers.import_manager import ImportManager
+from providers.mtgdecks_provider import MTGDecksProvider
 from services.image_service import load_card_image
 
 ctk.set_appearance_mode("dark")
@@ -26,7 +28,7 @@ class App(ctk.CTk):
         super().__init__()
 
         self.title("MTG AI Analyzer")
-        self.geometry("1600x850")
+        self.geometry("1800x850")
 
         self.paste_window = None
 
@@ -59,6 +61,13 @@ class App(ctk.CTk):
             command=self.open_paste_deck_window,
         )
         self.paste_deck_button.pack(side="left", padx=10, pady=10)
+
+        self.load_meta_button = ctk.CTkButton(
+            self.top_panel,
+            text="Загрузить мету Pioneer",
+            command=self.load_pioneer_meta,
+        )
+        self.load_meta_button.pack(side="left", padx=10, pady=10)
 
         self.center = ctk.CTkFrame(self)
         self.center.pack(
@@ -93,6 +102,14 @@ class App(ctk.CTk):
 
         self.deck_analysis_panel = DeckAnalysisPanel(self.center)
         self.deck_analysis_panel.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=10,
+        )
+
+        self.meta_panel = MetaPanel(self.center)
+        self.meta_panel.pack(
             side="left",
             fill="both",
             expand=True,
@@ -257,3 +274,26 @@ Sideboard
             self.deck_analysis_panel.show_error(str(error))
 
             self.status.label.configure(text="Ошибка загрузки колоды")
+
+    def load_pioneer_meta(self):
+        format_name = "Pioneer"
+
+        self.meta_panel.show_loading(format_name)
+
+        self.status.label.configure(text="Загрузка меты Pioneer...")
+
+        try:
+            provider = MTGDecksProvider()
+
+            snapshot = provider.get_meta(format_name)
+
+            self.meta_panel.show_snapshot(snapshot)
+
+            self.status.label.configure(
+                text=(f"Мета Pioneer загружена. " f"Архетипов: {snapshot.count}")
+            )
+
+        except Exception as error:
+            self.meta_panel.show_error(str(error))
+
+            self.status.label.configure(text="Ошибка загрузки меты")
