@@ -6,6 +6,7 @@ from analyzer.deck_analyzer import DeckAnalyzer
 from api.scryfall import get_card
 from gui.card_panel import CardPanel
 from gui.deck_analysis_panel import DeckAnalysisPanel
+from gui.deck_list_panel import DeckListPanel
 from gui.image_panel import ImagePanel
 from gui.search_panel import SearchPanel
 from gui.status_bar import StatusBar
@@ -25,7 +26,7 @@ class App(ctk.CTk):
         super().__init__()
 
         self.title("MTG AI Analyzer")
-        self.geometry("1400x800")
+        self.geometry("1600x850")
 
         self.paste_window = None
 
@@ -76,6 +77,14 @@ class App(ctk.CTk):
 
         self.card_panel = CardPanel(self.center)
         self.card_panel.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=10,
+        )
+
+        self.deck_list_panel = DeckListPanel(self.center)
+        self.deck_list_panel.pack(
             side="left",
             fill="both",
             expand=True,
@@ -154,7 +163,7 @@ class App(ctk.CTk):
 
         hint = ctk.CTkLabel(
             self.paste_window,
-            text=("Поддерживается обычный список, Arena export " "и Sideboard."),
+            text=("Поддерживается обычный список, " "Arena export и Sideboard."),
         )
         hint.pack(pady=(0, 10))
 
@@ -232,6 +241,7 @@ Sideboard
 
             analysis = DeckAnalyzer(deck).analyze()
 
+            self.deck_list_panel.show_deck(deck)
             self.deck_analysis_panel.show_analysis(analysis)
 
             self.status.label.configure(
@@ -243,6 +253,7 @@ Sideboard
             )
 
         except Exception as error:
+            self.deck_list_panel.show_error(str(error))
             self.deck_analysis_panel.show_error(str(error))
 
             self.status.label.configure(text="Ошибка загрузки колоды")
