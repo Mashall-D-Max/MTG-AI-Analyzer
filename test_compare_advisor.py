@@ -26,8 +26,18 @@ for recommendation in recommendations:
         f"{recommendation['add']}"
     )
 
-if len(recommendations) != 2:
-    raise RuntimeError(f"Ожидалось 2 рекомендации, получено {len(recommendations)}")
+if len(recommendations) != 3:
+    raise RuntimeError(f"Ожидалось 3 рекомендации, получено {len(recommendations)}")
+
+total_remove = sum(recommendation["quantity"] for recommendation in recommendations)
+
+total_add = sum(recommendation["quantity"] for recommendation in recommendations)
+
+if total_remove != 3:
+    raise RuntimeError(f"Ожидалось убрать 3 карты, получено {total_remove}")
+
+if total_add != 3:
+    raise RuntimeError(f"Ожидалось добавить 3 карты, получено {total_add}")
 
 print()
 print("RESULT: OK")
