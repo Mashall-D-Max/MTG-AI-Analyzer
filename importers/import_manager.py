@@ -4,6 +4,7 @@ from importers.registry import registry
 # Импортируем модули, чтобы они зарегистрировали свои импортеры.
 import importers.txt_importer
 import importers.arena_importer
+import importers.clipboard_importer
 
 
 class ImportManager:

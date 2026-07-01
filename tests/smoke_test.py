@@ -18,6 +18,18 @@ TEST_DECK_FILE = PROJECT_ROOT / "decks" / "test.txt"
 TEST_ARENA_DECK_FILE = PROJECT_ROOT / "decks" / "arena_test.txt"
 
 
+CLIPBOARD_DECK_TEXT = """
+4 Fatal Push
+4 Thoughtseize
+4 Ketramose, the New Dawn
+2 Plains
+2 Swamp
+
+Sideboard
+2 Duress
+"""
+
+
 class SmokeTest:
 
     def __init__(self):
@@ -131,6 +143,13 @@ class SmokeTest:
         if detected_format != DeckFormat.ARENA:
             raise RuntimeError(f"Ожидался ARENA, получен {detected_format}")
 
+    def test_format_detector_clipboard(self):
+
+        detected_format = FormatDetector.detect(CLIPBOARD_DECK_TEXT)
+
+        if detected_format != DeckFormat.CLIPBOARD:
+            raise RuntimeError(f"Ожидался CLIPBOARD, получен {detected_format}")
+
     def test_format_detector_mtgdecks(self):
 
         url = "https://mtgdecks.net/Pioneer/example-decklist"
@@ -150,18 +169,44 @@ class SmokeTest:
         if deck.unique_cards <= 0:
             raise RuntimeError("ImportManager не загрузил уникальные карты TXT")
 
+        if deck.sideboard_size != 0:
+            raise RuntimeError(
+                f"У TXT-колоды не должно быть sideboard, получено {deck.sideboard_size}"
+            )
+
     def test_import_manager_arena(self):
 
         deck = ImportManager().load(TEST_ARENA_DECK_FILE)
 
-        if deck.size <= 0:
-            raise RuntimeError("ImportManager загрузил пустую Arena-колоду")
+        if deck.mainboard_size != 16:
+            raise RuntimeError(
+                f"Ожидалось 16 карт mainboard, получено {deck.mainboard_size}"
+            )
 
-        if deck.unique_cards <= 0:
-            raise RuntimeError("ImportManager не загрузил уникальные карты Arena")
+        if deck.sideboard_size != 2:
+            raise RuntimeError(
+                f"Ожидалось 2 карты sideboard, получено {deck.sideboard_size}"
+            )
 
-        if deck.size != 16:
-            raise RuntimeError(f"Ожидалось 16 карт main deck, получено {deck.size}")
+        if deck.total_size != 18:
+            raise RuntimeError(f"Ожидалось 18 карт всего, получено {deck.total_size}")
+
+    def test_import_manager_clipboard(self):
+
+        deck = ImportManager().load(CLIPBOARD_DECK_TEXT)
+
+        if deck.mainboard_size != 16:
+            raise RuntimeError(
+                f"Ожидалось 16 карт mainboard, получено {deck.mainboard_size}"
+            )
+
+        if deck.sideboard_size != 2:
+            raise RuntimeError(
+                f"Ожидалось 2 карты sideboard, получено {deck.sideboard_size}"
+            )
+
+        if deck.total_size != 18:
+            raise RuntimeError(f"Ожидалось 18 карт всего, получено {deck.total_size}")
 
     def run(self):
 
@@ -178,9 +223,16 @@ class SmokeTest:
         self.run_check("Deck analyzer", self.test_deck_analyzer)
         self.run_check("Format detector TXT", self.test_format_detector_txt)
         self.run_check("Format detector Arena", self.test_format_detector_arena)
+        self.run_check("Format detector Clipboard", self.test_format_detector_clipboard)
         self.run_check("Format detector MTGDecks", self.test_format_detector_mtgdecks)
         self.run_check("Import manager TXT", self.test_import_manager_txt)
-        self.run_check("Import manager Arena", self.test_import_manager_arena)
+        self.run_check(
+            "Import manager Arena with sideboard", self.test_import_manager_arena
+        )
+        self.run_check(
+            "Import manager Clipboard with sideboard",
+            self.test_import_manager_clipboard,
+        )
 
         print()
         print("=" * 60)
