@@ -7,6 +7,7 @@ TESTS = [
     "test_meta_compare_basic.py",
     "test_meta_compare_zones.py",
     "test_mana_impact_advisor.py",
+    "test_deck_upgrade_builder.py",
     "test_decklist_garbage_filter.py",
     "test_mtgdecks_deck_parser.py",
     "test_mtgdecks_importer.py",

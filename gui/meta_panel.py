@@ -7,7 +7,7 @@ from utils.text_shortcuts import bind_text_shortcuts
 
 class MetaPanel(ctk.CTkFrame):
     """
-    Панель отображения меты и сравнения колод.
+    Панель отображения меты, сравнения и обновлённой колоды.
     """
 
     def __init__(self, master):
@@ -81,6 +81,13 @@ class MetaPanel(ctk.CTkFrame):
             user_deck=user_deck,
             reference_deck=reference_deck,
         )
+
+    def show_upgraded_deck_text(self, deck_text):
+        self.text.delete("1.0", "end")
+
+        self._write("=== Обновлённая колода ===\n\n")
+        self._write(deck_text)
+        self._write("\n")
 
     def _show_full_compare_result(
         self,

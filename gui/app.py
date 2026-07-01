@@ -14,6 +14,7 @@ from gui.meta_panel import MetaPanel
 from gui.search_panel import SearchPanel
 from gui.status_bar import StatusBar
 from importers.import_manager import ImportManager
+from meta.deck_upgrade_builder import DeckUpgradeBuilder
 from meta.meta_compare import MetaCompare
 from providers.mtgdecks_provider import MTGDecksProvider
 from services.image_service import load_card_image
@@ -46,6 +47,8 @@ class App(ctk.CTk):
         self.geometry("1850x900")
 
         self.current_deck = None
+        self.last_reference_deck = None
+        self.last_comparison = None
         self.paste_window = None
 
         self.title_label = ctk.CTkLabel(
@@ -100,6 +103,13 @@ class App(ctk.CTk):
             command=self.compare_mtgdecks_url,
         )
         self.compare_mtgdecks_button.pack(side="left", padx=5, pady=10)
+
+        self.build_upgraded_deck_button = ctk.CTkButton(
+            self.top_panel,
+            text="Сформировать колоду",
+            command=self.build_upgraded_deck,
+        )
+        self.build_upgraded_deck_button.pack(side="left", padx=5, pady=10)
 
         self.meta_format_combo = ctk.CTkComboBox(
             self.top_panel,
@@ -384,6 +394,9 @@ Sideboard
     def _on_deck_loaded(self, deck, analysis, success_prefix):
         self.current_deck = deck
 
+        self.last_reference_deck = None
+        self.last_comparison = None
+
         self.deck_list_panel.show_deck(deck)
         self.deck_analysis_panel.show_analysis(analysis)
 
@@ -464,6 +477,9 @@ Sideboard
         user_deck,
         reference_deck,
     ):
+        self.last_comparison = comparison
+        self.last_reference_deck = reference_deck
+
         self.meta_panel.show_compare_result(
             comparison=comparison,
             user_deck=user_deck,
@@ -473,7 +489,7 @@ Sideboard
         self._set_deck_buttons_state("normal")
 
         self.status.label.configure(
-            text=f"Сравнение готово: {comparison.get('similarity', 0)}%"
+            text=f"Сравнение готово: {comparison.get('overall_similarity', 0)}%"
         )
 
     def _on_compare_error(self, message):
@@ -482,6 +498,29 @@ Sideboard
         self._set_deck_buttons_state("normal")
 
         self.status.label.configure(text="Ошибка сравнения колод")
+
+    # ======================================================
+    # Deck upgrade
+    # ======================================================
+
+    def build_upgraded_deck(self):
+        if self.current_deck is None:
+            self.status.label.configure(text="Сначала загрузи свою колоду")
+            return
+
+        if self.last_reference_deck is None or self.last_comparison is None:
+            self.status.label.configure(text="Сначала выполни сравнение с MTGDecks URL")
+            return
+
+        deck_text = DeckUpgradeBuilder().build_upgraded_deck_text(
+            user_deck=self.current_deck,
+            reference_deck=self.last_reference_deck,
+            comparison=self.last_comparison,
+        )
+
+        self.meta_panel.show_upgraded_deck_text(deck_text)
+
+        self.status.label.configure(text="Обновлённая колода сформирована")
 
     # ======================================================
     # Meta loading
@@ -555,6 +594,7 @@ Sideboard
         self.paste_deck_button.configure(state=state)
         self.load_mtgdecks_button.configure(state=state)
         self.compare_mtgdecks_button.configure(state=state)
+        self.build_upgraded_deck_button.configure(state=state)
 
     def _run_background(self, target, args=None):
         if args is None:
