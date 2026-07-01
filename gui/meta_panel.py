@@ -1,10 +1,11 @@
 import customtkinter as ctk
+
 from utils.text_shortcuts import bind_text_shortcuts
 
 
 class MetaPanel(ctk.CTkFrame):
     """
-    Панель отображения меты формата.
+    Панель отображения меты и сравнения колод.
     """
 
     def __init__(self, master):
@@ -12,7 +13,7 @@ class MetaPanel(ctk.CTkFrame):
 
         self.title = ctk.CTkLabel(
             self,
-            text="Мета",
+            text="Мета / Compare",
             font=("Arial", 18, "bold"),
         )
         self.title.pack(pady=10)
@@ -29,7 +30,6 @@ class MetaPanel(ctk.CTkFrame):
             pady=10,
         )
 
-        # Подключаем горячие клавиши
         bind_text_shortcuts(self.text)
 
     def show_snapshot(self, snapshot):
@@ -57,16 +57,74 @@ class MetaPanel(ctk.CTkFrame):
 
             self._write("\n")
 
+    def show_compare_result(
+        self,
+        comparison,
+        user_deck=None,
+        reference_deck=None,
+    ):
+        self.text.delete("1.0", "end")
+
+        similarity = comparison.get("similarity", 0)
+
+        missing_cards = comparison.get("missing_cards", {})
+        extra_cards = comparison.get("extra_cards", {})
+        matched_cards = comparison.get("matched_cards", {})
+
+        self._write("=== Meta Compare ===\n\n")
+
+        self._write("Сравнение пока выполняется только по mainboard.\n\n")
+
+        if user_deck is not None:
+            self._write(f"Твоя колода       : {user_deck.mainboard_size} карт\n")
+
+        if reference_deck is not None:
+            self._write(f"Эталонная колода  : {reference_deck.mainboard_size} карт\n")
+
+        self._write("\n")
+
+        self._write(f"Совпадение: {similarity}%\n")
+
+        self._write("\n=== Не хватает ===\n\n")
+
+        if not missing_cards:
+            self._write("Ничего не не хватает.\n")
+        else:
+            for card_name, quantity in sorted(missing_cards.items()):
+                self._write(f"{quantity} {card_name}\n")
+
+        self._write("\n=== Лишние карты ===\n\n")
+
+        if not extra_cards:
+            self._write("Лишних карт нет.\n")
+        else:
+            for card_name, quantity in sorted(extra_cards.items()):
+                self._write(f"{quantity} {card_name}\n")
+
+        self._write("\n=== Совпало ===\n\n")
+
+        if not matched_cards:
+            self._write("Совпадений нет.\n")
+        else:
+            for card_name, quantity in sorted(matched_cards.items()):
+                self._write(f"{quantity} {card_name}\n")
+
     def show_loading(self, format_name):
         self.text.delete("1.0", "end")
 
         self._write("Загрузка меты...\n\n")
         self._write(f"Формат: {format_name}\n")
 
+    def show_compare_loading(self):
+        self.text.delete("1.0", "end")
+
+        self._write("Сравнение колод...\n\n")
+        self._write("Загружаю эталонную колоду с MTGDecks и сравниваю с текущей.\n")
+
     def show_error(self, message):
         self.text.delete("1.0", "end")
 
-        self._write("Ошибка загрузки меты\n\n")
+        self._write("Ошибка\n\n")
         self._write(str(message))
 
     def clear(self):

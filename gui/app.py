@@ -14,6 +14,7 @@ from gui.meta_panel import MetaPanel
 from gui.search_panel import SearchPanel
 from gui.status_bar import StatusBar
 from importers.import_manager import ImportManager
+from meta.meta_compare import MetaCompare
 from providers.mtgdecks_provider import MTGDecksProvider
 from services.image_service import load_card_image
 from utils.text_shortcuts import bind_text_shortcuts
@@ -44,6 +45,7 @@ class App(ctk.CTk):
         self.title("MTG AI Analyzer")
         self.geometry("1850x900")
 
+        self.current_deck = None
         self.paste_window = None
 
         self.title_label = ctk.CTkLabel(
@@ -79,7 +81,7 @@ class App(ctk.CTk):
         self.mtgdecks_url_entry = ctk.CTkEntry(
             self.top_panel,
             width=360,
-            placeholder_text="Ссылка MTGDecks...",
+            placeholder_text="URL MTGDecks...",
         )
         self.mtgdecks_url_entry.pack(side="left", padx=10, pady=10)
 
@@ -90,12 +92,19 @@ class App(ctk.CTk):
             text="Загрузить URL",
             command=self.load_mtgdecks_url,
         )
-        self.load_mtgdecks_button.pack(side="left", padx=10, pady=10)
+        self.load_mtgdecks_button.pack(side="left", padx=5, pady=10)
+
+        self.compare_mtgdecks_button = ctk.CTkButton(
+            self.top_panel,
+            text="Сравнить с URL",
+            command=self.compare_mtgdecks_url,
+        )
+        self.compare_mtgdecks_button.pack(side="left", padx=5, pady=10)
 
         self.meta_format_combo = ctk.CTkComboBox(
             self.top_panel,
             values=self.META_FORMATS,
-            width=160,
+            width=150,
             state="readonly",
         )
         self.meta_format_combo.set("Pioneer")
@@ -344,9 +353,7 @@ Sideboard
     def analyze_deck_source(self, source, success_prefix):
         self.status.label.configure(text="Загрузка и анализ колоды...")
 
-        self.open_deck_button.configure(state="disabled")
-        self.paste_deck_button.configure(state="disabled")
-        self.load_mtgdecks_button.configure(state="disabled")
+        self._set_deck_buttons_state("disabled")
 
         self._run_background(
             target=self._analyze_deck_worker,
@@ -375,12 +382,12 @@ Sideboard
             )
 
     def _on_deck_loaded(self, deck, analysis, success_prefix):
+        self.current_deck = deck
+
         self.deck_list_panel.show_deck(deck)
         self.deck_analysis_panel.show_analysis(analysis)
 
-        self.open_deck_button.configure(state="normal")
-        self.paste_deck_button.configure(state="normal")
-        self.load_mtgdecks_button.configure(state="normal")
+        self._set_deck_buttons_state("normal")
 
         self.status.label.configure(
             text=(
@@ -394,11 +401,87 @@ Sideboard
         self.deck_list_panel.show_error(message)
         self.deck_analysis_panel.show_error(message)
 
-        self.open_deck_button.configure(state="normal")
-        self.paste_deck_button.configure(state="normal")
-        self.load_mtgdecks_button.configure(state="normal")
+        self._set_deck_buttons_state("normal")
 
         self.status.label.configure(text="Ошибка загрузки колоды")
+
+    # ======================================================
+    # Deck compare
+    # ======================================================
+
+    def compare_mtgdecks_url(self):
+        if self.current_deck is None:
+            self.status.label.configure(text="Сначала загрузи свою колоду")
+            return
+
+        url = self.mtgdecks_url_entry.get().strip()
+
+        if not url:
+            self.status.label.configure(text="Вставь ссылку MTGDecks для сравнения")
+            return
+
+        self.meta_panel.show_compare_loading()
+
+        self.status.label.configure(text="Сравнение с MTGDecks...")
+
+        self._set_deck_buttons_state("disabled")
+
+        self._run_background(
+            target=self._compare_mtgdecks_worker,
+            args=(
+                self.current_deck,
+                url,
+            ),
+        )
+
+    def _compare_mtgdecks_worker(self, user_deck, url):
+        try:
+            reference_deck = ImportManager().load(url)
+
+            comparison = MetaCompare().compare_decks(
+                user_deck,
+                reference_deck,
+            )
+
+            self.after(
+                0,
+                self._on_compare_loaded,
+                comparison,
+                user_deck,
+                reference_deck,
+            )
+
+        except Exception as error:
+            self.after(
+                0,
+                self._on_compare_error,
+                str(error),
+            )
+
+    def _on_compare_loaded(
+        self,
+        comparison,
+        user_deck,
+        reference_deck,
+    ):
+        self.meta_panel.show_compare_result(
+            comparison=comparison,
+            user_deck=user_deck,
+            reference_deck=reference_deck,
+        )
+
+        self._set_deck_buttons_state("normal")
+
+        self.status.label.configure(
+            text=f"Сравнение готово: {comparison.get('similarity', 0)}%"
+        )
+
+    def _on_compare_error(self, message):
+        self.meta_panel.show_error(message)
+
+        self._set_deck_buttons_state("normal")
+
+        self.status.label.configure(text="Ошибка сравнения колод")
 
     # ======================================================
     # Meta loading
@@ -466,6 +549,12 @@ Sideboard
     # ======================================================
     # Helpers
     # ======================================================
+
+    def _set_deck_buttons_state(self, state):
+        self.open_deck_button.configure(state=state)
+        self.paste_deck_button.configure(state=state)
+        self.load_mtgdecks_button.configure(state=state)
+        self.compare_mtgdecks_button.configure(state=state)
 
     def _run_background(self, target, args=None):
         if args is None:
