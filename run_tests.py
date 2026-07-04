@@ -6,6 +6,7 @@ from pathlib import Path
 TESTS = [
     "test_scryfall_query_builder.py",
     "test_scryfall_search_client.py",
+    "test_scryfall_thumbnail_service.py",
     "test_compare_advisor.py",
     "test_meta_compare_basic.py",
     "test_meta_compare_zones.py",

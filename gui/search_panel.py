@@ -2,10 +2,18 @@ import threading
 import tkinter as tk
 import webbrowser
 
+from concurrent.futures import ThreadPoolExecutor
+
 import customtkinter as ctk
 
 from api.scryfall_search import ScryfallSearchClient
-from services.scryfall_query_builder import ScryfallQueryBuilder
+from gui.scryfall_card_tile import ScryfallCardTile
+from services.scryfall_query_builder import (
+    ScryfallQueryBuilder,
+)
+from services.scryfall_thumbnail_service import (
+    ScryfallThumbnailService,
+)
 from utils.text_shortcuts import bind_text_shortcuts
 
 
@@ -18,15 +26,20 @@ class SearchPanel(ctk.CTkFrame):
     - Расширенный поиск;
     - ALL SET;
     - Результаты.
-
-    search_callback получает название выбранной карты.
-    Главное окно затем загружает изображение и полную информацию.
     """
 
     QUICK_TAB = "Быстрый поиск"
     ADVANCED_TAB = "Расширенный поиск"
     SETS_TAB = "ALL SET"
     RESULTS_TAB = "Результаты"
+
+    RESULT_COLUMNS = 6
+    RESULT_TILE_WIDTH = 190
+    RESULT_TILE_HEIGHT = 330
+    THUMBNAIL_SIZE = (
+        174,
+        244,
+    )
 
     COLOR_VALUES = (
         "W",
@@ -151,11 +164,23 @@ class SearchPanel(ctk.CTkFrame):
 
         self.client = ScryfallSearchClient()
 
+        self.thumbnail_service = ScryfallThumbnailService()
+
+        self.thumbnail_executor = ThreadPoolExecutor(
+            max_workers=5,
+            thread_name_prefix=("scryfall-thumbnail"),
+        )
+
+        self.thumbnail_generation = 0
+
         self.current_query = ""
         self.current_page = 1
         self.current_options = {}
 
         self.result_cards = []
+        self.result_tiles = []
+
+        self.selected_result_index = None
         self.has_more_results = False
 
         self.all_sets = []
@@ -185,8 +210,11 @@ class SearchPanel(ctk.CTkFrame):
         )
 
         self.quick_tab = self.tabs.add(self.QUICK_TAB)
+
         self.advanced_tab = self.tabs.add(self.ADVANCED_TAB)
+
         self.sets_tab = self.tabs.add(self.SETS_TAB)
+
         self.results_tab = self.tabs.add(self.RESULTS_TAB)
 
         self._build_quick_tab()
@@ -252,8 +280,9 @@ class SearchPanel(ctk.CTkFrame):
         description = ctk.CTkLabel(
             content,
             text=(
-                "Можно вводить название карты или полноценный "
-                "поисковый запрос Scryfall."
+                "Можно вводить название карты "
+                "или полноценный поисковый запрос "
+                "Scryfall."
             ),
         )
         description.pack(
@@ -274,7 +303,7 @@ class SearchPanel(ctk.CTkFrame):
             search_row,
             height=42,
             placeholder_text=(
-                "Пример: Aang или " "type:creature color<=WU legal:pioneer"
+                "Пример: Aang или " "type:creature color<=WU " "legal:pioneer"
             ),
         )
         self.quick_query_entry.pack(
@@ -412,6 +441,7 @@ class SearchPanel(ctk.CTkFrame):
             0,
             weight=1,
         )
+
         form.grid_columnconfigure(
             1,
             weight=1,
@@ -765,7 +795,9 @@ class SearchPanel(ctk.CTkFrame):
             width=90,
             state="readonly",
         )
+
         self.advanced_combos["price_currency"].set("usd")
+
         self.advanced_combos["price_currency"].pack(
             side="left",
             padx=4,
@@ -777,7 +809,9 @@ class SearchPanel(ctk.CTkFrame):
             width=80,
             state="readonly",
         )
+
         self.advanced_combos["price_operator"].set("<=")
+
         self.advanced_combos["price_operator"].pack(
             side="left",
             padx=4,
@@ -824,7 +858,7 @@ class SearchPanel(ctk.CTkFrame):
 
         self.include_extras_switch = ctk.CTkSwitch(
             additional_section,
-            text="Включать extras и tokens",
+            text=("Включать extras и tokens"),
         )
         self.include_extras_switch.pack(
             anchor="w",
@@ -1141,7 +1175,7 @@ class SearchPanel(ctk.CTkFrame):
             "language": ("" if language == "any" else language),
             "price_currency": (self.advanced_combos["price_currency"].get()),
             "price_operator": (self.advanced_combos["price_operator"].get()),
-            "price_value": self._entry_value("price_value"),
+            "price_value": (self._entry_value("price_value")),
         }
 
     def reset_advanced_form(self):
@@ -1188,7 +1222,10 @@ class SearchPanel(ctk.CTkFrame):
 
         self._set_status("Фильтры расширенного поиска сброшены")
 
-    def _set_advanced_query_text(self, query):
+    def _set_advanced_query_text(
+        self,
+        query,
+    ):
         self.advanced_query_textbox.delete(
             "1.0",
             "end",
@@ -1229,7 +1266,7 @@ class SearchPanel(ctk.CTkFrame):
 
         self.set_name_entry.bind(
             "<KeyRelease>",
-            lambda event: self.refresh_sets_list(),
+            lambda event: (self.refresh_sets_list()),
         )
 
         self.set_language_combo = ctk.CTkComboBox(
@@ -1327,12 +1364,12 @@ class SearchPanel(ctk.CTkFrame):
 
         self.sets_listbox.bind(
             "<Double-Button-1>",
-            lambda event: self.open_selected_set(),
+            lambda event: (self.open_selected_set()),
         )
 
         self.sets_listbox.bind(
             "<Return>",
-            lambda event: self.open_selected_set(),
+            lambda event: (self.open_selected_set()),
         )
 
         bottom_row = ctk.CTkFrame(
@@ -1372,7 +1409,7 @@ class SearchPanel(ctk.CTkFrame):
 
         self.sets_loading = True
 
-        self.sets_status_label.configure(text="Загрузка наборов Scryfall...")
+        self.sets_status_label.configure(text=("Загрузка наборов Scryfall..."))
 
         self.reload_sets_button.configure(state="disabled")
 
@@ -1402,13 +1439,23 @@ class SearchPanel(ctk.CTkFrame):
                 str(error),
             )
 
-    def _on_sets_loaded(self, sets):
+    def _on_sets_loaded(
+        self,
+        sets,
+    ):
         self.all_sets = sets
         self.sets_loaded = True
         self.sets_loading = False
 
         set_types = sorted(
-            {item.get("set_type", "") for item in sets if item.get("set_type")}
+            {
+                item.get(
+                    "set_type",
+                    "",
+                )
+                for item in sets
+                if item.get("set_type")
+            }
         )
 
         self.set_type_combo.configure(
@@ -1423,7 +1470,10 @@ class SearchPanel(ctk.CTkFrame):
 
         self.refresh_sets_list()
 
-    def _on_sets_error(self, message):
+    def _on_sets_error(
+        self,
+        message,
+    ):
         self.sets_loading = False
 
         self.reload_sets_button.configure(state="normal")
@@ -1439,14 +1489,32 @@ class SearchPanel(ctk.CTkFrame):
         search_text = self.set_name_entry.get().strip().lower()
 
         set_type = self.set_type_combo.get()
+
         sort_mode = self.set_sort_combo.get()
 
         filtered = []
 
         for set_data in self.all_sets:
-            name = str(set_data.get("name", ""))
-            code = str(set_data.get("code", ""))
-            current_type = str(set_data.get("set_type", ""))
+            name = str(
+                set_data.get(
+                    "name",
+                    "",
+                )
+            )
+
+            code = str(
+                set_data.get(
+                    "code",
+                    "",
+                )
+            )
+
+            current_type = str(
+                set_data.get(
+                    "set_type",
+                    "",
+                )
+            )
 
             if search_text:
                 if search_text not in name.lower() and search_text not in code.lower():
@@ -1458,25 +1526,56 @@ class SearchPanel(ctk.CTkFrame):
             filtered.append(set_data)
 
         if sort_mode == "name":
-            filtered.sort(key=lambda item: (str(item.get("name", "")).lower()))
+            filtered.sort(
+                key=lambda item: (
+                    str(
+                        item.get(
+                            "name",
+                            "",
+                        )
+                    ).lower()
+                )
+            )
 
         elif sort_mode == "cards":
             filtered.sort(
-                key=lambda item: int(item.get("card_count", 0) or 0),
+                key=lambda item: int(
+                    item.get(
+                        "card_count",
+                        0,
+                    )
+                    or 0
+                ),
                 reverse=True,
             )
 
         elif sort_mode == "type":
             filtered.sort(
                 key=lambda item: (
-                    str(item.get("set_type", "")),
-                    str(item.get("name", "")).lower(),
+                    str(
+                        item.get(
+                            "set_type",
+                            "",
+                        )
+                    ),
+                    str(
+                        item.get(
+                            "name",
+                            "",
+                        )
+                    ).lower(),
                 )
             )
 
         else:
             filtered.sort(
-                key=lambda item: str(item.get("released_at", "") or ""),
+                key=lambda item: str(
+                    item.get(
+                        "released_at",
+                        "",
+                    )
+                    or ""
+                ),
                 reverse=True,
             )
 
@@ -1488,15 +1587,42 @@ class SearchPanel(ctk.CTkFrame):
         )
 
         for set_data in filtered:
-            code = str(set_data.get("code", "")).upper()
+            code = str(
+                set_data.get(
+                    "code",
+                    "",
+                )
+            ).upper()
 
-            name = str(set_data.get("name", ""))
+            name = str(
+                set_data.get(
+                    "name",
+                    "",
+                )
+            )
 
-            set_type_value = str(set_data.get("set_type", ""))
+            set_type_value = str(
+                set_data.get(
+                    "set_type",
+                    "",
+                )
+            )
 
-            cards = int(set_data.get("card_count", 0) or 0)
+            cards = int(
+                set_data.get(
+                    "card_count",
+                    0,
+                )
+                or 0
+            )
 
-            released_at = str(set_data.get("released_at", "") or "—")
+            released_at = str(
+                set_data.get(
+                    "released_at",
+                    "",
+                )
+                or "—"
+            )
 
             line = (
                 f"{code:<8} "
@@ -1512,7 +1638,7 @@ class SearchPanel(ctk.CTkFrame):
             )
 
         self.sets_status_label.configure(
-            text=(f"Показано наборов: " f"{len(filtered)} из " f"{len(self.all_sets)}")
+            text=("Показано наборов: " f"{len(filtered)} из " f"{len(self.all_sets)}")
         )
 
     def open_selected_set(self):
@@ -1529,7 +1655,12 @@ class SearchPanel(ctk.CTkFrame):
 
         set_data = self.filtered_sets[index]
 
-        code = str(set_data.get("code", "")).strip()
+        code = str(
+            set_data.get(
+                "code",
+                "",
+            )
+        ).strip()
 
         if not code:
             return
@@ -1553,7 +1684,7 @@ class SearchPanel(ctk.CTkFrame):
         )
 
     # ======================================================
-    # Результаты
+    # Визуальные результаты
     # ======================================================
 
     def _build_results_tab(self):
@@ -1566,7 +1697,7 @@ class SearchPanel(ctk.CTkFrame):
 
         self.results_summary_label = ctk.CTkLabel(
             top_row,
-            text="Поиск ещё не выполнялся",
+            text=("Поиск ещё не выполнялся"),
             anchor="w",
         )
         self.results_summary_label.pack(
@@ -1580,7 +1711,7 @@ class SearchPanel(ctk.CTkFrame):
         self.previous_page_button = ctk.CTkButton(
             top_row,
             text="← Предыдущая",
-            command=self.open_previous_page,
+            command=(self.open_previous_page),
             width=130,
             state="disabled",
         )
@@ -1616,54 +1747,23 @@ class SearchPanel(ctk.CTkFrame):
             pady=(0, 6),
         )
 
-        list_frame = ctk.CTkFrame(self.results_tab)
-        list_frame.pack(
+        self.results_grid = ctk.CTkScrollableFrame(
+            self.results_tab,
+            fg_color="transparent",
+        )
+        self.results_grid.pack(
             fill="both",
             expand=True,
             padx=8,
             pady=(0, 8),
         )
 
-        scrollbar = tk.Scrollbar(
-            list_frame,
-            orient="vertical",
-        )
-        scrollbar.pack(
-            side="right",
-            fill="y",
-        )
-
-        self.results_listbox = tk.Listbox(
-            list_frame,
-            yscrollcommand=scrollbar.set,
-            bg="#1f1f1f",
-            fg="#eeeeee",
-            selectbackground="#1f6aa5",
-            selectforeground="#ffffff",
-            borderwidth=0,
-            highlightthickness=0,
-            font=("Consolas", 11),
-            activestyle="none",
-        )
-        self.results_listbox.pack(
-            side="left",
-            fill="both",
-            expand=True,
-            padx=4,
-            pady=4,
-        )
-
-        scrollbar.configure(command=self.results_listbox.yview)
-
-        self.results_listbox.bind(
-            "<Double-Button-1>",
-            lambda event: (self.open_selected_result()),
-        )
-
-        self.results_listbox.bind(
-            "<Return>",
-            lambda event: (self.open_selected_result()),
-        )
+        for column in range(self.RESULT_COLUMNS):
+            self.results_grid.grid_columnconfigure(
+                column,
+                weight=1,
+                uniform="result-column",
+            )
 
         bottom_row = ctk.CTkFrame(
             self.results_tab,
@@ -1675,16 +1775,6 @@ class SearchPanel(ctk.CTkFrame):
             pady=(0, 8),
         )
 
-        open_card_button = ctk.CTkButton(
-            bottom_row,
-            text="Открыть выбранную карту",
-            command=self.open_selected_result,
-            width=210,
-        )
-        open_card_button.pack(
-            side="right",
-        )
-
         self.results_status_label = ctk.CTkLabel(
             bottom_row,
             text="Готово",
@@ -1694,6 +1784,17 @@ class SearchPanel(ctk.CTkFrame):
             side="left",
             fill="x",
             expand=True,
+        )
+
+        self.open_result_button = ctk.CTkButton(
+            bottom_row,
+            text=("Открыть выбранную карту"),
+            command=(self.open_selected_result),
+            width=210,
+            state="disabled",
+        )
+        self.open_result_button.pack(
+            side="right",
         )
 
     def start_search(
@@ -1712,7 +1813,7 @@ class SearchPanel(ctk.CTkFrame):
             return
 
         if self.search_running:
-            self._set_status("Дождитесь завершения текущего поиска")
+            self._set_status("Дождитесь завершения " "текущего поиска")
             return
 
         self.search_running = True
@@ -1727,7 +1828,7 @@ class SearchPanel(ctk.CTkFrame):
             "unique": unique,
             "order": order,
             "direction": direction,
-            "include_extras": include_extras,
+            "include_extras": (include_extras),
         }
 
         self._set_search_controls_state("disabled")
@@ -1736,9 +1837,11 @@ class SearchPanel(ctk.CTkFrame):
 
         self.tabs.set(self.RESULTS_TAB)
 
-        self.results_summary_label.configure(text="Загрузка результатов...")
+        self.results_summary_label.configure(text=("Загрузка результатов..."))
 
-        self.results_status_label.configure(text="Обращение к Scryfall...")
+        self.results_status_label.configure(text=("Обращение к Scryfall..."))
+
+        self._clear_result_grid()
 
         self._run_background(
             self._search_worker,
@@ -1812,32 +1915,11 @@ class SearchPanel(ctk.CTkFrame):
             or 0
         )
 
-        self.results_listbox.delete(
-            0,
-            "end",
-        )
-
-        for card in self.result_cards:
-            name = str(card.get("name", ""))
-
-            set_code = str(card.get("set", "")).upper()
-
-            rarity = str(card.get("rarity", ""))
-
-            type_line = str(card.get("type_line", ""))
-
-            line = f"{name:<48} " f"[{set_code:<6}] " f"{rarity:<10} " f"{type_line}"
-
-            self.results_listbox.insert(
-                "end",
-                line,
-            )
-
         self.results_summary_label.configure(
             text=(
                 f"Найдено карт: {total_cards} | "
                 f"Страница: {page} | "
-                f"На странице: "
+                "На странице: "
                 f"{len(self.result_cards)}"
             )
         )
@@ -1854,37 +1936,216 @@ class SearchPanel(ctk.CTkFrame):
 
         self._set_search_controls_state("normal")
 
-        self._set_status(f"Поиск завершён. Найдено: {total_cards}")
+        self._set_status("Поиск завершён. " f"Найдено: {total_cards}")
+
+        if not self.result_cards:
+            self.results_status_label.configure(text="Карты не найдены")
+            return
 
         self.results_status_label.configure(
-            text=("Выберите карту и нажмите Enter " "или дважды щёлкните по ней")
+            text=(
+                "Миниатюры загружаются в фоне. "
+                "Выберите карту или дважды "
+                "щёлкните по ней."
+            )
         )
 
-        if len(self.result_cards) == 1:
-            self.results_listbox.selection_set(0)
-            self.open_selected_result()
+        self._render_result_grid()
 
-    def _on_search_error(self, message):
+        if len(self.result_cards) == 1:
+            self._select_result(0)
+
+    def _on_search_error(
+        self,
+        message,
+    ):
         self.search_running = False
 
         self.result_cards = []
         self.has_more_results = False
+        self.selected_result_index = None
 
-        self.results_listbox.delete(
-            0,
-            "end",
-        )
+        self._clear_result_grid()
 
         self.results_summary_label.configure(text="Карты не найдены")
 
-        self.results_status_label.configure(text=f"Ошибка поиска: {message}")
+        self.results_status_label.configure(text=(f"Ошибка поиска: {message}"))
 
         self.previous_page_button.configure(state="disabled")
+
         self.next_page_button.configure(state="disabled")
+
+        self.open_result_button.configure(state="disabled")
 
         self._set_search_controls_state("normal")
 
         self._set_status(f"Ошибка поиска: {message}")
+
+    def _render_result_grid(self):
+        self._clear_result_grid()
+
+        self.thumbnail_generation += 1
+        generation = self.thumbnail_generation
+
+        for index, card_data in enumerate(self.result_cards):
+            row = index // self.RESULT_COLUMNS
+
+            column = index % self.RESULT_COLUMNS
+
+            tile = ScryfallCardTile(
+                master=self.results_grid,
+                card_data=card_data,
+                index=index,
+                on_select=self._select_result,
+                on_open=self._open_result_by_index,
+                width=self.RESULT_TILE_WIDTH,
+                height=self.RESULT_TILE_HEIGHT,
+            )
+
+            tile.grid(
+                row=row,
+                column=column,
+                padx=7,
+                pady=7,
+                sticky="n",
+            )
+
+            self.result_tiles.append(tile)
+
+            self.thumbnail_executor.submit(
+                self._thumbnail_worker,
+                index,
+                card_data,
+                generation,
+            )
+
+    def _thumbnail_worker(
+        self,
+        index,
+        card_data,
+        generation,
+    ):
+        try:
+            image = self.thumbnail_service.load_thumbnail(
+                card_data=card_data,
+                size=self.THUMBNAIL_SIZE,
+            )
+
+        except Exception:
+            image = None
+
+        try:
+            self.after(
+                0,
+                self._apply_thumbnail,
+                index,
+                image,
+                generation,
+            )
+        except tk.TclError:
+            return
+
+    def _apply_thumbnail(
+        self,
+        index,
+        image,
+        generation,
+    ):
+        if generation != self.thumbnail_generation:
+            return
+
+        if index >= len(self.result_tiles):
+            return
+
+        tile = self.result_tiles[index]
+
+        if not tile.winfo_exists():
+            return
+
+        if image is None:
+            tile.show_image_error()
+        else:
+            tile.set_image(image)
+
+    def _clear_result_grid(self):
+        self.thumbnail_generation += 1
+
+        self.selected_result_index = None
+
+        self.open_result_button.configure(state="disabled")
+
+        for tile in self.result_tiles:
+            try:
+                tile.destroy()
+            except tk.TclError:
+                pass
+
+        self.result_tiles = []
+
+        for child in self.results_grid.winfo_children():
+            try:
+                child.destroy()
+            except tk.TclError:
+                pass
+
+    def _select_result(
+        self,
+        index,
+    ):
+        if index < 0 or index >= len(self.result_cards):
+            return
+
+        self.selected_result_index = index
+
+        for tile_index, tile in enumerate(self.result_tiles):
+            tile.set_selected(tile_index == index)
+
+        card_data = self.result_cards[index]
+
+        card_name = str(
+            card_data.get(
+                "name",
+                "",
+            )
+        )
+
+        self.open_result_button.configure(state="normal")
+
+        self.results_status_label.configure(text=(f"Выбрана карта: {card_name}"))
+
+    def _open_result_by_index(
+        self,
+        index,
+    ):
+        self._select_result(index)
+
+        self.open_selected_result()
+
+    def open_selected_result(self):
+        index = self.selected_result_index
+
+        if index is None:
+            self.results_status_label.configure(text="Выберите карту")
+            return
+
+        if index >= len(self.result_cards):
+            return
+
+        card = self.result_cards[index]
+
+        card_name = str(
+            card.get(
+                "name",
+                "",
+            )
+        ).strip()
+
+        if not card_name:
+            return
+
+        self.results_status_label.configure(text=(f"Открытие карты: {card_name}"))
+
+        self.search_callback(card_name)
 
     def open_previous_page(self):
         if self.current_page <= 1:
@@ -1905,29 +2166,6 @@ class SearchPanel(ctk.CTkFrame):
             page=self.current_page + 1,
             **self.current_options,
         )
-
-    def open_selected_result(self):
-        selection = self.results_listbox.curselection()
-
-        if not selection:
-            self.results_status_label.configure(text="Выберите карту")
-            return
-
-        index = selection[0]
-
-        if index >= len(self.result_cards):
-            return
-
-        card = self.result_cards[index]
-
-        card_name = str(card.get("name", "")).strip()
-
-        if not card_name:
-            return
-
-        self.results_status_label.configure(text=f"Открытие карты: {card_name}")
-
-        self.search_callback(card_name)
 
     # ======================================================
     # Случайная карта
@@ -1950,7 +2188,10 @@ class SearchPanel(ctk.CTkFrame):
             query,
         )
 
-    def _random_card_worker(self, query):
+    def _random_card_worker(
+        self,
+        query,
+    ):
         try:
             card = self.client.get_random_card(query=query or None)
 
@@ -1978,26 +2219,9 @@ class SearchPanel(ctk.CTkFrame):
         self._set_search_controls_state("normal")
 
         self.result_cards = [card]
+
         self.current_page = 1
         self.has_more_results = False
-
-        card_name = str(card.get("name", ""))
-
-        set_code = str(card.get("set", "")).upper()
-
-        type_line = str(card.get("type_line", ""))
-
-        self.results_listbox.delete(
-            0,
-            "end",
-        )
-
-        self.results_listbox.insert(
-            "end",
-            (f"{card_name:<48} " f"[{set_code:<6}] " f"{type_line}"),
-        )
-
-        self.results_listbox.selection_set(0)
 
         self.results_summary_label.configure(text="Случайная карта")
 
@@ -2006,20 +2230,31 @@ class SearchPanel(ctk.CTkFrame):
         )
 
         self.previous_page_button.configure(state="disabled")
+
         self.next_page_button.configure(state="disabled")
 
         self.tabs.set(self.RESULTS_TAB)
 
-        self._set_status(f"Случайная карта: {card_name}")
+        self._render_result_grid()
+        self._select_result(0)
 
-        if card_name:
-            self.search_callback(card_name)
+        card_name = str(
+            card.get(
+                "name",
+                "",
+            )
+        )
+
+        self._set_status(f"Случайная карта: {card_name}")
 
     # ======================================================
     # Общие методы
     # ======================================================
 
-    def _entry_value(self, key):
+    def _entry_value(
+        self,
+        key,
+    ):
         entry = self.advanced_entries.get(key)
 
         if entry is None:
@@ -2041,7 +2276,10 @@ class SearchPanel(ctk.CTkFrame):
 
         return [item.strip() for item in normalized.split(",") if item.strip()]
 
-    def _set_status(self, message):
+    def _set_status(
+        self,
+        message,
+    ):
         self.quick_status_label.configure(text=message)
 
         if hasattr(
@@ -2062,6 +2300,7 @@ class SearchPanel(ctk.CTkFrame):
 
         if state == "disabled":
             self.previous_page_button.configure(state="disabled")
+
             self.next_page_button.configure(state="disabled")
 
     def _run_background(
@@ -2076,3 +2315,16 @@ class SearchPanel(ctk.CTkFrame):
         )
 
         thread.start()
+
+    def destroy(self):
+        self.thumbnail_generation += 1
+
+        try:
+            self.thumbnail_executor.shutdown(
+                wait=False,
+                cancel_futures=True,
+            )
+        except Exception:
+            pass
+
+        super().destroy()
