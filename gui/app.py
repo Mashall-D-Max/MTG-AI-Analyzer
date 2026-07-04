@@ -358,9 +358,9 @@ class App(ctk.CTk):
 
         self.build_upgraded_deck_button = ctk.CTkButton(
             actions_row,
-            text="Сформировать колоду",
+            text="Сформировать",
             command=self.build_upgraded_deck,
-            width=190,
+            width=150,
         )
         self.build_upgraded_deck_button.pack(
             side="left",
@@ -368,11 +368,23 @@ class App(ctk.CTk):
             pady=8,
         )
 
+        self.open_upgraded_deck_button = ctk.CTkButton(
+            actions_row,
+            text="Открыть в анализе",
+            command=self.open_upgraded_deck_in_analysis,
+            width=170,
+        )
+        self.open_upgraded_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=8,
+        )
+
         self.copy_upgraded_deck_button = ctk.CTkButton(
             actions_row,
-            text="Копировать колоду",
+            text="Копировать",
             command=self.copy_upgraded_deck,
-            width=180,
+            width=140,
         )
         self.copy_upgraded_deck_button.pack(
             side="left",
@@ -382,9 +394,9 @@ class App(ctk.CTk):
 
         self.save_upgraded_deck_button = ctk.CTkButton(
             actions_row,
-            text="Сохранить колоду",
+            text="Сохранить",
             command=self.save_upgraded_deck,
-            width=180,
+            width=140,
         )
         self.save_upgraded_deck_button.pack(
             side="left",
@@ -577,7 +589,10 @@ Sideboard
         self.paste_textbox.insert("1.0", example)
 
     def analyze_pasted_deck(self):
-        deck_text = self.paste_textbox.get("1.0", "end").strip()
+        deck_text = self.paste_textbox.get(
+            "1.0",
+            "end",
+        ).strip()
 
         if not deck_text:
             self.status.label.configure(text="Вставленный decklist пустой")
@@ -605,7 +620,11 @@ Sideboard
             success_prefix="Колода загружена с MTGDecks.",
         )
 
-    def analyze_deck_source(self, source, success_prefix):
+    def analyze_deck_source(
+        self,
+        source,
+        success_prefix,
+    ):
         self.tabs.set("Колода")
 
         self.status.label.configure(text="Загрузка и анализ колоды...")
@@ -614,13 +633,19 @@ Sideboard
 
         self._run_background(
             target=self._analyze_deck_worker,
-            args=(source, success_prefix),
+            args=(
+                source,
+                success_prefix,
+            ),
         )
 
-    def _analyze_deck_worker(self, source, success_prefix):
+    def _analyze_deck_worker(
+        self,
+        source,
+        success_prefix,
+    ):
         try:
             deck = ImportManager().load(source)
-
             analysis = DeckAnalyzer(deck).analyze()
 
             self.after(
@@ -638,7 +663,12 @@ Sideboard
                 str(error),
             )
 
-    def _on_deck_loaded(self, deck, analysis, success_prefix):
+    def _on_deck_loaded(
+        self,
+        deck,
+        analysis,
+        success_prefix,
+    ):
         self.current_deck = deck
 
         self.last_reference_deck = None
@@ -664,7 +694,7 @@ Sideboard
 
         self._set_deck_buttons_state("normal")
 
-        self.status.label.configure(text="Ошибка загрузки колоды")
+        self.status.label.configure(text=f"Ошибка загрузки колоды: {message}")
 
     # ======================================================
     # Deck compare
@@ -701,7 +731,11 @@ Sideboard
             ),
         )
 
-    def _compare_mtgdecks_worker(self, user_deck, url):
+    def _compare_mtgdecks_worker(
+        self,
+        user_deck,
+        url,
+    ):
         try:
             reference_deck = ImportManager().load(url)
 
@@ -744,7 +778,7 @@ Sideboard
         self._set_deck_buttons_state("normal")
 
         self.status.label.configure(
-            text=f"Сравнение готово: {comparison.get('overall_similarity', 0)}%"
+            text=("Сравнение готово: " f"{comparison.get('overall_similarity', 0)}%")
         )
 
     def _on_compare_error(self, message):
@@ -752,7 +786,7 @@ Sideboard
 
         self._set_deck_buttons_state("normal")
 
-        self.status.label.configure(text="Ошибка сравнения колод")
+        self.status.label.configure(text=f"Ошибка сравнения колод: {message}")
 
     # ======================================================
     # Deck upgrade
@@ -783,6 +817,18 @@ Sideboard
 
         self.status.label.configure(text="Обновлённая колода сформирована")
 
+    def open_upgraded_deck_in_analysis(self):
+        if not self.last_upgraded_deck_text:
+            self.status.label.configure(text="Сначала сформируй обновлённую колоду")
+            return
+
+        upgraded_deck_text = self.last_upgraded_deck_text
+
+        self.analyze_deck_source(
+            source=upgraded_deck_text,
+            success_prefix=("Обновлённая колода открыта в анализе."),
+        )
+
     def copy_upgraded_deck(self):
         if not self.last_upgraded_deck_text:
             self.status.label.configure(text="Сначала сформируй обновлённую колоду")
@@ -796,7 +842,7 @@ Sideboard
             self.update_idletasks()
 
             self.status.label.configure(
-                text="Обновлённая колода скопирована в буфер обмена"
+                text=("Обновлённая колода " "скопирована в буфер обмена")
             )
 
         except Exception as error:
@@ -847,7 +893,6 @@ Sideboard
     def _load_meta_worker(self, format_name):
         try:
             provider = MTGDecksProvider()
-
             snapshot = provider.get_meta(format_name)
 
             self.after(
@@ -882,7 +927,7 @@ Sideboard
         self.load_meta_button.configure(state="normal")
         self.meta_format_combo.configure(state="readonly")
 
-        self.status.label.configure(text="Ошибка загрузки меты")
+        self.status.label.configure(text=f"Ошибка загрузки меты: {message}")
 
     # ======================================================
     # Helpers
@@ -896,6 +941,7 @@ Sideboard
         if state == "disabled":
             self.compare_mtgdecks_button.configure(state="disabled")
             self.build_upgraded_deck_button.configure(state="disabled")
+            self.open_upgraded_deck_button.configure(state="disabled")
             self.copy_upgraded_deck_button.configure(state="disabled")
             self.save_upgraded_deck_button.configure(state="disabled")
             return
@@ -914,13 +960,19 @@ Sideboard
             self.build_upgraded_deck_button.configure(state="normal")
 
         if not self.last_upgraded_deck_text:
+            self.open_upgraded_deck_button.configure(state="disabled")
             self.copy_upgraded_deck_button.configure(state="disabled")
             self.save_upgraded_deck_button.configure(state="disabled")
         else:
+            self.open_upgraded_deck_button.configure(state="normal")
             self.copy_upgraded_deck_button.configure(state="normal")
             self.save_upgraded_deck_button.configure(state="normal")
 
-    def _run_background(self, target, args=None):
+    def _run_background(
+        self,
+        target,
+        args=None,
+    ):
         if args is None:
             args = ()
 

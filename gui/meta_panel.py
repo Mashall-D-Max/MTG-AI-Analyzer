@@ -7,8 +7,17 @@ from utils.text_shortcuts import bind_text_shortcuts
 
 class MetaPanel(ctk.CTkFrame):
     """
-    Панель отображения меты, сравнения и обновлённой колоды.
+    Панель меты, сравнения и сформированной колоды.
+
+    Внутренние вкладки:
+    - Мета;
+    - Сравнение;
+    - Новая колода.
     """
+
+    META_TAB = "Мета"
+    COMPARE_TAB = "Сравнение"
+    DECK_TAB = "Новая колода"
 
     def __init__(self, master):
         super().__init__(master)
@@ -18,24 +27,58 @@ class MetaPanel(ctk.CTkFrame):
             text="Мета / Compare",
             font=("Arial", 18, "bold"),
         )
-        self.title.pack(pady=10)
+        self.title.pack(pady=(10, 5))
 
-        self.text = ctk.CTkTextbox(
-            self,
-            width=360,
-            height=500,
-        )
-        self.text.pack(
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.pack(
             fill="both",
             expand=True,
             padx=10,
             pady=10,
         )
 
-        bind_text_shortcuts(self.text)
+        self.meta_tab = self.tabs.add(self.META_TAB)
+        self.compare_tab = self.tabs.add(self.COMPARE_TAB)
+        self.deck_tab = self.tabs.add(self.DECK_TAB)
+
+        self.meta_text = self._create_textbox(self.meta_tab)
+
+        self.compare_text = self._create_textbox(self.compare_tab)
+
+        self.deck_text = self._create_textbox(self.deck_tab)
+
+        self.current_textbox = self.meta_text
+
+        self.tabs.set(self.META_TAB)
+
+    def _create_textbox(self, parent):
+        textbox = ctk.CTkTextbox(
+            parent,
+            width=500,
+            height=500,
+        )
+        textbox.pack(
+            fill="both",
+            expand=True,
+            padx=8,
+            pady=8,
+        )
+
+        bind_text_shortcuts(textbox)
+
+        return textbox
+
+    # ======================================================
+    # Meta
+    # ======================================================
 
     def show_snapshot(self, snapshot):
-        self.text.delete("1.0", "end")
+        self._select_output(
+            tab_name=self.META_TAB,
+            textbox=self.meta_text,
+        )
+
+        self._clear_current()
 
         self._write("=== Meta Snapshot ===\n\n")
         self._write(f"Format : {snapshot.format_name}\n")
@@ -59,13 +102,33 @@ class MetaPanel(ctk.CTkFrame):
 
             self._write("\n")
 
+    def show_loading(self, format_name):
+        self._select_output(
+            tab_name=self.META_TAB,
+            textbox=self.meta_text,
+        )
+
+        self._clear_current()
+
+        self._write("Загрузка меты...\n\n")
+        self._write(f"Формат: {format_name}\n")
+
+    # ======================================================
+    # Compare
+    # ======================================================
+
     def show_compare_result(
         self,
         comparison,
         user_deck=None,
         reference_deck=None,
     ):
-        self.text.delete("1.0", "end")
+        self._select_output(
+            tab_name=self.COMPARE_TAB,
+            textbox=self.compare_text,
+        )
+
+        self._clear_current()
 
         if "mainboard" in comparison:
             self._show_full_compare_result(
@@ -82,12 +145,18 @@ class MetaPanel(ctk.CTkFrame):
             reference_deck=reference_deck,
         )
 
-    def show_upgraded_deck_text(self, deck_text):
-        self.text.delete("1.0", "end")
+    def show_compare_loading(self):
+        self._select_output(
+            tab_name=self.COMPARE_TAB,
+            textbox=self.compare_text,
+        )
 
-        self._write("=== Обновлённая колода ===\n\n")
-        self._write(deck_text)
-        self._write("\n")
+        self._clear_current()
+
+        self._write("Сравнение колод...\n\n")
+        self._write(
+            "Загружаю эталонную колоду с MTGDecks " "и сравниваю её с текущей.\n"
+        )
 
     def _show_full_compare_result(
         self,
@@ -117,39 +186,33 @@ class MetaPanel(ctk.CTkFrame):
 
         self._write("\n")
 
-        self._write(f"Overall similarity  : {overall.get('similarity', 0)}%\n")
-        self._write(f"Mainboard similarity: {mainboard.get('similarity', 0)}%\n")
-        self._write(f"Sideboard similarity: {sideboard.get('similarity', 0)}%\n")
+        self._write(f"Общее совпадение    : " f"{overall.get('similarity', 0)}%\n")
+        self._write(f"Совпадение mainboard: " f"{mainboard.get('similarity', 0)}%\n")
+        self._write(f"Совпадение sideboard: " f"{sideboard.get('similarity', 0)}%\n")
 
-        self._write("\n")
-        self._write("=" * 40)
-        self._write("\n\n")
+        self._write_separator()
 
         self._write("### MAINBOARD ###\n\n")
 
         self._write_compare_block(
             comparison=mainboard,
-            user_deck_cards=user_deck.cards if user_deck else None,
-            reference_deck_cards=reference_deck.cards if reference_deck else None,
+            user_deck_cards=(user_deck.cards if user_deck else None),
+            reference_deck_cards=(reference_deck.cards if reference_deck else None),
         )
 
-        self._write("\n")
-        self._write("=" * 40)
-        self._write("\n\n")
+        self._write_separator()
 
         self._write("### SIDEBOARD ###\n\n")
 
         self._write_compare_block(
             comparison=sideboard,
-            user_deck_cards=user_deck.sideboard if user_deck else None,
-            reference_deck_cards=reference_deck.sideboard if reference_deck else None,
+            user_deck_cards=(user_deck.sideboard if user_deck else None),
+            reference_deck_cards=(reference_deck.sideboard if reference_deck else None),
         )
 
-        self._write("\n")
-        self._write("=" * 40)
-        self._write("\n\n")
+        self._write_separator()
 
-        self._write("### ПРОВЕРКА МАНЫ ПОСЛЕ MAINBOARD-ЗАМЕН ###\n\n")
+        self._write("### ПРОВЕРКА МАНЫ ПОСЛЕ " "MAINBOARD-ЗАМЕН ###\n\n")
 
         if user_deck is None or reference_deck is None:
             self._write("Нет данных для проверки маны.\n")
@@ -167,7 +230,11 @@ class MetaPanel(ctk.CTkFrame):
             return
 
         for item in mana_report:
-            status = "OK" if item["ok"] else "НЕ ХВАТАЕТ"
+            if item["ok"]:
+                status = "OK"
+            else:
+                shortage = abs(item["difference"])
+                status = f"НЕ ХВАТАЕТ {shortage}"
 
             self._write(
                 f"{item['symbol']} {item['name']}: "
@@ -186,18 +253,21 @@ class MetaPanel(ctk.CTkFrame):
         self._write(f"=== Meta Compare: {title} ===\n\n")
 
         if user_deck is not None:
-            self._write(f"Твоя колода       : {user_deck.mainboard_size} карт\n")
+            self._write(f"Твоя колода       : " f"{user_deck.mainboard_size} карт\n")
 
         if reference_deck is not None:
-            self._write(f"Эталонная колода  : {reference_deck.mainboard_size} карт\n")
+            self._write(
+                f"Эталонная колода  : " f"{reference_deck.mainboard_size} карт\n"
+            )
 
         self._write("\n")
-        self._write(f"Совпадение: {comparison.get('similarity', 0)}%\n\n")
+
+        self._write(f"Совпадение: " f"{comparison.get('similarity', 0)}%\n\n")
 
         self._write_compare_block(
             comparison=comparison,
-            user_deck_cards=user_deck.cards if user_deck else None,
-            reference_deck_cards=reference_deck.cards if reference_deck else None,
+            user_deck_cards=(user_deck.cards if user_deck else None),
+            reference_deck_cards=(reference_deck.cards if reference_deck else None),
         )
 
     def _write_compare_block(
@@ -206,14 +276,25 @@ class MetaPanel(ctk.CTkFrame):
         user_deck_cards=None,
         reference_deck_cards=None,
     ):
-        missing_cards = comparison.get("missing_cards", {})
-        extra_cards = comparison.get("extra_cards", {})
-        matched_cards = comparison.get("matched_cards", {})
+        missing_cards = comparison.get(
+            "missing_cards",
+            {},
+        )
+
+        extra_cards = comparison.get(
+            "extra_cards",
+            {},
+        )
+
+        matched_cards = comparison.get(
+            "matched_cards",
+            {},
+        )
 
         self._write("=== Не хватает ===\n\n")
 
         if not missing_cards:
-            self._write("Ничего не не хватает.\n")
+            self._write("Недостающих карт нет.\n")
         else:
             for card_name, quantity in sorted(missing_cards.items()):
                 self._write(f"{quantity} {card_name}\n")
@@ -260,26 +341,62 @@ class MetaPanel(ctk.CTkFrame):
                 f"{mana_change}\n"
             )
 
-    def show_loading(self, format_name):
-        self.text.delete("1.0", "end")
+    # ======================================================
+    # Upgraded deck
+    # ======================================================
 
-        self._write("Загрузка меты...\n\n")
-        self._write(f"Формат: {format_name}\n")
+    def show_upgraded_deck_text(self, deck_text):
+        self._select_output(
+            tab_name=self.DECK_TAB,
+            textbox=self.deck_text,
+        )
 
-    def show_compare_loading(self):
-        self.text.delete("1.0", "end")
+        self._clear_current()
 
-        self._write("Сравнение колод...\n\n")
-        self._write("Загружаю эталонную колоду с MTGDecks и сравниваю с текущей.\n")
+        self._write("=== Обновлённая колода ===\n\n")
+
+        self._write(deck_text)
+        self._write("\n")
+
+    # ======================================================
+    # Common
+    # ======================================================
 
     def show_error(self, message):
-        self.text.delete("1.0", "end")
+        self._clear_current()
 
         self._write("Ошибка\n\n")
         self._write(str(message))
 
     def clear(self):
-        self.text.delete("1.0", "end")
+        for textbox in (
+            self.meta_text,
+            self.compare_text,
+            self.deck_text,
+        ):
+            textbox.delete("1.0", "end")
+
+    def _select_output(
+        self,
+        tab_name,
+        textbox,
+    ):
+        self.tabs.set(tab_name)
+        self.current_textbox = textbox
+
+    def _clear_current(self):
+        self.current_textbox.delete(
+            "1.0",
+            "end",
+        )
+
+    def _write_separator(self):
+        self._write("\n")
+        self._write("=" * 50)
+        self._write("\n\n")
 
     def _write(self, text):
-        self.text.insert("end", text)
+        self.current_textbox.insert(
+            "end",
+            text,
+        )
