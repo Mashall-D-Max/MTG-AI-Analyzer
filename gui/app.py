@@ -231,41 +231,85 @@ class App(ctk.CTk):
     # ======================================================
 
     def _build_meta_tab(self):
-        top_panel = ctk.CTkFrame(self.meta_tab)
-        top_panel.pack(
+        toolbar = ctk.CTkFrame(self.meta_tab)
+        toolbar.pack(
             fill="x",
             padx=10,
             pady=10,
         )
 
+        # --------------------------------------------------
+        # Строка загрузки меты
+        # --------------------------------------------------
+
+        meta_row = ctk.CTkFrame(toolbar)
+        meta_row.pack(
+            fill="x",
+            padx=10,
+            pady=(10, 5),
+        )
+
+        meta_label = ctk.CTkLabel(
+            meta_row,
+            text="Мета формата:",
+            font=("Arial", 15, "bold"),
+        )
+        meta_label.pack(
+            side="left",
+            padx=8,
+            pady=8,
+        )
+
         self.meta_format_combo = ctk.CTkComboBox(
-            top_panel,
+            meta_row,
             values=self.META_FORMATS,
-            width=150,
+            width=180,
             state="readonly",
         )
         self.meta_format_combo.set("Pioneer")
         self.meta_format_combo.pack(
             side="left",
             padx=8,
-            pady=10,
+            pady=8,
         )
 
         self.load_meta_button = ctk.CTkButton(
-            top_panel,
+            meta_row,
             text="Загрузить мету",
             command=self.load_selected_meta,
-            width=150,
+            width=160,
         )
         self.load_meta_button.pack(
             side="left",
             padx=8,
-            pady=10,
+            pady=8,
+        )
+
+        # --------------------------------------------------
+        # Строка сравнения
+        # --------------------------------------------------
+
+        compare_row = ctk.CTkFrame(toolbar)
+        compare_row.pack(
+            fill="x",
+            padx=10,
+            pady=5,
+        )
+
+        compare_label = ctk.CTkLabel(
+            compare_row,
+            text="Эталонная колода:",
+            font=("Arial", 15, "bold"),
+        )
+        compare_label.pack(
+            side="left",
+            padx=8,
+            pady=8,
         )
 
         self.compare_mtgdecks_url_entry = ctk.CTkEntry(
-            top_panel,
-            width=460,
+            compare_row,
+            width=600,
             placeholder_text="URL MTGDecks для сравнения...",
         )
         self.compare_mtgdecks_url_entry.pack(
@@ -273,45 +317,79 @@ class App(ctk.CTk):
             fill="x",
             expand=True,
             padx=8,
-            pady=10,
+            pady=8,
         )
 
         bind_text_shortcuts(self.compare_mtgdecks_url_entry)
 
         self.compare_mtgdecks_button = ctk.CTkButton(
-            top_panel,
+            compare_row,
             text="Сравнить с URL",
             command=self.compare_mtgdecks_url,
-            width=150,
+            width=160,
         )
         self.compare_mtgdecks_button.pack(
             side="left",
             padx=8,
-            pady=10,
+            pady=8,
+        )
+
+        # --------------------------------------------------
+        # Строка действий с обновлённой колодой
+        # --------------------------------------------------
+
+        actions_row = ctk.CTkFrame(toolbar)
+        actions_row.pack(
+            fill="x",
+            padx=10,
+            pady=(5, 10),
+        )
+
+        actions_label = ctk.CTkLabel(
+            actions_row,
+            text="Обновлённая колода:",
+            font=("Arial", 15, "bold"),
+        )
+        actions_label.pack(
+            side="left",
+            padx=8,
+            pady=8,
         )
 
         self.build_upgraded_deck_button = ctk.CTkButton(
-            top_panel,
+            actions_row,
             text="Сформировать колоду",
             command=self.build_upgraded_deck,
-            width=180,
+            width=190,
         )
         self.build_upgraded_deck_button.pack(
             side="left",
             padx=8,
-            pady=10,
+            pady=8,
+        )
+
+        self.copy_upgraded_deck_button = ctk.CTkButton(
+            actions_row,
+            text="Копировать колоду",
+            command=self.copy_upgraded_deck,
+            width=180,
+        )
+        self.copy_upgraded_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=8,
         )
 
         self.save_upgraded_deck_button = ctk.CTkButton(
-            top_panel,
+            actions_row,
             text="Сохранить колоду",
             command=self.save_upgraded_deck,
-            width=170,
+            width=180,
         )
         self.save_upgraded_deck_button.pack(
             side="left",
             padx=8,
-            pady=10,
+            pady=8,
         )
 
         content = ctk.CTkFrame(self.meta_tab)
@@ -705,6 +783,25 @@ Sideboard
 
         self.status.label.configure(text="Обновлённая колода сформирована")
 
+    def copy_upgraded_deck(self):
+        if not self.last_upgraded_deck_text:
+            self.status.label.configure(text="Сначала сформируй обновлённую колоду")
+            return
+
+        try:
+            self.clipboard_clear()
+
+            self.clipboard_append(self.last_upgraded_deck_text)
+
+            self.update_idletasks()
+
+            self.status.label.configure(
+                text="Обновлённая колода скопирована в буфер обмена"
+            )
+
+        except Exception as error:
+            self.status.label.configure(text=f"Ошибка копирования колоды: {error}")
+
     def save_upgraded_deck(self):
         if not self.last_upgraded_deck_text:
             self.status.label.configure(text="Сначала сформируй обновлённую колоду")
@@ -799,6 +896,7 @@ Sideboard
         if state == "disabled":
             self.compare_mtgdecks_button.configure(state="disabled")
             self.build_upgraded_deck_button.configure(state="disabled")
+            self.copy_upgraded_deck_button.configure(state="disabled")
             self.save_upgraded_deck_button.configure(state="disabled")
             return
 
@@ -816,8 +914,10 @@ Sideboard
             self.build_upgraded_deck_button.configure(state="normal")
 
         if not self.last_upgraded_deck_text:
+            self.copy_upgraded_deck_button.configure(state="disabled")
             self.save_upgraded_deck_button.configure(state="disabled")
         else:
+            self.copy_upgraded_deck_button.configure(state="normal")
             self.save_upgraded_deck_button.configure(state="normal")
 
     def _run_background(self, target, args=None):
