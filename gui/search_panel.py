@@ -2145,7 +2145,7 @@ class SearchPanel(ctk.CTkFrame):
 
         self.results_status_label.configure(text=(f"Открытие карты: {card_name}"))
 
-        self.search_callback(card_name)
+        self.search_callback(card)
 
     def open_previous_page(self):
         if self.current_page <= 1:

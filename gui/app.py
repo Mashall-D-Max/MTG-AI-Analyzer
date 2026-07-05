@@ -19,6 +19,7 @@ from meta.meta_compare import MetaCompare
 from providers.mtgdecks_provider import MTGDecksProvider
 from services.deck_export_service import DeckExportService
 from services.image_service import load_card_image
+from services.scryfall_thumbnail_service import ScryfallThumbnailService
 from utils.text_shortcuts import bind_text_shortcuts
 
 ctk.set_appearance_mode("dark")
@@ -58,6 +59,9 @@ class App(ctk.CTk):
         self.last_comparison = None
         self.last_upgraded_deck_text = None
         self.paste_window = None
+
+        self.scryfall_thumbnail_service = ScryfallThumbnailService()
+        self.card_request_id = 0
 
         self.title_label = ctk.CTkLabel(
             self,
@@ -424,23 +428,112 @@ class App(ctk.CTk):
     # Card search
     # ======================================================
 
-    def search_card(self, card_name):
-        card_name = card_name.strip()
+    def search_card(self, card_source):
+        """
+        Открывает карту в нижней области вкладки поиска.
 
-        if not card_name:
-            self.status.label.configure(text="Введите название карты")
-            return
+        card_source может быть:
+        - строкой с названием карты;
+        - исходным JSON конкретного издания Scryfall.
+
+        При передаче JSON сохраняются точный набор, язык,
+        номер коллекционера и изображение выбранного издания.
+        """
+
+        self.card_request_id += 1
+        request_id = self.card_request_id
 
         self.tabs.set("Поиск карт")
+
+        self.card_panel.show_loading()
+        self.image_panel.show_loading()
+
+        if isinstance(card_source, dict):
+            card_name = str(card_source.get("name", "")).strip()
+
+            if not card_name:
+                self._on_card_error(
+                    "У выбранного издания отсутствует название",
+                    request_id,
+                )
+                return
+
+            set_code = str(card_source.get("set", "")).upper().strip()
+
+            collector_number = str(card_source.get("collector_number", "")).strip()
+
+            printing_parts = [card_name]
+
+            if set_code:
+                printing_parts.append(f"[{set_code}]")
+
+            if collector_number:
+                printing_parts.append(f"№ {collector_number}")
+
+            self.status.label.configure(
+                text=("Загрузка выбранного издания: " + " ".join(printing_parts))
+            )
+
+            self._run_background(
+                target=self._load_scryfall_printing_worker,
+                args=(
+                    card_source,
+                    request_id,
+                ),
+            )
+            return
+
+        card_name = str(card_source).strip()
+
+        if not card_name:
+            self._on_card_error(
+                "Введите название карты",
+                request_id,
+            )
+            return
 
         self.status.label.configure(text=f"Загрузка карты: {card_name}")
 
         self._run_background(
             target=self._search_card_worker,
-            args=(card_name,),
+            args=(
+                card_name,
+                request_id,
+            ),
         )
 
-    def _search_card_worker(self, card_name):
+    def _load_scryfall_printing_worker(
+        self,
+        card_data,
+        request_id,
+    ):
+        try:
+            image = self.scryfall_thumbnail_service.load_thumbnail(
+                card_data=card_data,
+                size=(500, 700),
+            )
+
+            self.after(
+                0,
+                self._on_scryfall_printing_loaded,
+                card_data,
+                image,
+                request_id,
+            )
+
+        except Exception as error:
+            self.after(
+                0,
+                self._on_card_error,
+                str(error),
+                request_id,
+            )
+
+    def _search_card_worker(
+        self,
+        card_name,
+        request_id,
+    ):
         try:
             card = get_card(card_name)
 
@@ -448,6 +541,7 @@ class App(ctk.CTk):
                 self.after(
                     0,
                     self._on_card_not_found,
+                    request_id,
                 )
                 return
 
@@ -458,6 +552,7 @@ class App(ctk.CTk):
                 self._on_card_loaded,
                 card,
                 image,
+                request_id,
             )
 
         except Exception as error:
@@ -465,18 +560,73 @@ class App(ctk.CTk):
                 0,
                 self._on_card_error,
                 str(error),
+                request_id,
             )
 
-    def _on_card_loaded(self, card, image):
+    def _on_scryfall_printing_loaded(
+        self,
+        card_data,
+        image,
+        request_id,
+    ):
+        if request_id != self.card_request_id:
+            return
+
+        self.card_panel.show_card(card_data)
+        self.image_panel.show_image(image)
+
+        card_name = str(card_data.get("name", "Без названия"))
+
+        set_code = str(card_data.get("set", "")).upper().strip()
+
+        collector_number = str(card_data.get("collector_number", "")).strip()
+
+        printing = ""
+
+        if set_code:
+            printing += f" [{set_code}]"
+
+        if collector_number:
+            printing += f" № {collector_number}"
+
+        self.status.label.configure(
+            text=("Загружено выбранное издание: " f"{card_name}{printing}")
+        )
+
+    def _on_card_loaded(
+        self,
+        card,
+        image,
+        request_id,
+    ):
+        if request_id != self.card_request_id:
+            return
+
         self.card_panel.show_card(card)
         self.image_panel.show_image(image)
 
         self.status.label.configure(text=f"Загружена карта: {card.name}")
 
-    def _on_card_not_found(self):
+    def _on_card_not_found(self, request_id):
+        if request_id != self.card_request_id:
+            return
+
+        self.card_panel.show_error("Карта не найдена")
+        self.image_panel.show_error("Изображение не найдено")
+
         self.status.label.configure(text="Карта не найдена")
 
-    def _on_card_error(self, message):
+    def _on_card_error(
+        self,
+        message,
+        request_id,
+    ):
+        if request_id != self.card_request_id:
+            return
+
+        self.card_panel.show_error(message)
+        self.image_panel.show_error()
+
         self.status.label.configure(text=f"Ошибка загрузки карты: {message}")
 
     # ======================================================
