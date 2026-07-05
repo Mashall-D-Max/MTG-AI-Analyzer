@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 import customtkinter as ctk
 
 from api.scryfall_search import ScryfallSearchClient
+from gui.scryfall_card_page import ScryfallCardPage
 from gui.scryfall_card_tile import ScryfallCardTile
 from services.scryfall_query_builder import (
     ScryfallQueryBuilder,
@@ -153,19 +154,20 @@ class SearchPanel(ctk.CTkFrame):
     def __init__(
         self,
         master,
-        search_callback,
+        search_callback=None,
         add_to_deck_callback=None,
     ):
-        super().__init__(
-            master,
-            height=395,
-        )
+        super().__init__(master)
 
         self.search_callback = search_callback
         self.add_to_deck_callback = (
             add_to_deck_callback
         )
 
+        self.card_tab_by_key = {}
+        self.card_key_by_tab = {}
+        self.card_pages = {}
+        self.card_tab_order = []
         self.client = ScryfallSearchClient()
 
         self.thumbnail_service = ScryfallThumbnailService()
@@ -200,8 +202,6 @@ class SearchPanel(ctk.CTkFrame):
         self.color_variables = {}
         self.identity_variables = {}
 
-        self.pack_propagate(False)
-
         self.tabs = ctk.CTkTabview(
             self,
             command=self._on_tab_changed,
@@ -228,26 +228,13 @@ class SearchPanel(ctk.CTkFrame):
 
         self.tabs.set(self.QUICK_TAB)
 
-        self.master.bind(
-            "<Configure>",
-            self._sync_width_with_parent,
-            add="+",
-        )
 
     # ======================================================
     # Общая компоновка
     # ======================================================
 
     def _sync_width_with_parent(self, event):
-        if event.width < 200:
-            return
-
-        self.configure(
-            width=max(
-                800,
-                event.width - 20,
-            )
-        )
+        return
 
     def _on_tab_changed(self):
         selected_tab = self.tabs.get()
@@ -2132,27 +2119,150 @@ class SearchPanel(ctk.CTkFrame):
         index = self.selected_result_index
 
         if index is None:
-            self.results_status_label.configure(text="Выберите карту")
+            self.results_status_label.configure(
+                text="Выберите карту"
+            )
             return
 
-        if index >= len(self.result_cards):
+        if index < 0 or index >= len(self.result_cards):
             return
 
         card = self.result_cards[index]
+        self.open_card_page(card)
 
-        card_name = str(
-            card.get(
-                "name",
-                "",
-            )
-        ).strip()
-
-        if not card_name:
+    def open_card_page(self, card_data):
+        if not isinstance(card_data, dict):
             return
 
-        self.results_status_label.configure(text=(f"Открытие карты: {card_name}"))
+        card_name = str(
+            card_data.get("name", "Без названия")
+        ).strip() or "Без названия"
 
-        self.search_callback(card)
+        card_key = self._card_tab_key(card_data)
+        existing_tab = self.card_tab_by_key.get(card_key)
+
+        if existing_tab:
+            try:
+                self.tabs.set(existing_tab)
+                return
+            except Exception:
+                self.card_tab_by_key.pop(card_key, None)
+                self.card_key_by_tab.pop(existing_tab, None)
+                self.card_pages.pop(existing_tab, None)
+
+        tab_name = self._build_card_tab_name(card_data)
+        tab = self.tabs.add(tab_name)
+
+        page = ScryfallCardPage(
+            master=tab,
+            card_data=card_data,
+            on_back=lambda: self.tabs.set(self.RESULTS_TAB),
+            on_close=lambda name=tab_name: self.close_card_tab(name),
+            on_add_to_deck=self.add_to_deck_callback,
+        )
+        page.pack(
+            fill="both",
+            expand=True,
+            padx=4,
+            pady=4,
+        )
+
+        self.card_tab_by_key[card_key] = tab_name
+        self.card_key_by_tab[tab_name] = card_key
+        self.card_pages[tab_name] = page
+        self.card_tab_order.append(tab_name)
+
+        self.results_status_label.configure(
+            text=f"Открыта вкладка карты: {card_name}"
+        )
+        self.tabs.set(tab_name)
+
+    def close_card_tab(self, tab_name):
+        if tab_name not in self.card_key_by_tab:
+            return
+
+        page = self.card_pages.pop(tab_name, None)
+
+        if page is not None:
+            try:
+                page.destroy()
+            except Exception:
+                pass
+
+        card_key = self.card_key_by_tab.pop(tab_name, None)
+
+        if card_key is not None:
+            self.card_tab_by_key.pop(card_key, None)
+
+        if tab_name in self.card_tab_order:
+            self.card_tab_order.remove(tab_name)
+
+        try:
+            self.tabs.delete(tab_name)
+        except Exception:
+            pass
+
+        self.tabs.set(self.RESULTS_TAB)
+
+    def _build_card_tab_name(self, card_data):
+        card_name = str(
+            card_data.get("name", "Карта")
+        ).strip() or "Карта"
+        set_code = str(
+            card_data.get("set", "")
+        ).upper().strip()
+        collector_number = str(
+            card_data.get("collector_number", "")
+        ).strip()
+
+        short_name = (
+            card_name
+            if len(card_name) <= 24
+            else card_name[:21] + "..."
+        )
+
+        suffix_parts = []
+
+        if set_code:
+            suffix_parts.append(set_code)
+
+        if collector_number:
+            suffix_parts.append(collector_number)
+
+        base_name = short_name
+
+        if suffix_parts:
+            base_name += " [" + " ".join(suffix_parts) + "]"
+
+        tab_name = base_name
+        counter = 2
+
+        while tab_name in self.card_key_by_tab or tab_name in {
+            self.QUICK_TAB,
+            self.ADVANCED_TAB,
+            self.SETS_TAB,
+            self.RESULTS_TAB,
+        }:
+            tab_name = f"{base_name} ({counter})"
+            counter += 1
+
+        return tab_name
+
+    @staticmethod
+    def _card_tab_key(card_data):
+        card_id = str(card_data.get("id", "")).strip()
+
+        if card_id:
+            return "id:" + card_id.casefold()
+
+        return "|".join(
+            (
+                str(card_data.get("name", "")).strip().casefold(),
+                str(card_data.get("set", "")).strip().casefold(),
+                str(card_data.get("collector_number", "")).strip().casefold(),
+                str(card_data.get("lang", "")).strip().casefold(),
+            )
+        )
 
     def open_previous_page(self):
         if self.current_page <= 1:
@@ -2325,6 +2435,17 @@ class SearchPanel(ctk.CTkFrame):
 
     def destroy(self):
         self.thumbnail_generation += 1
+
+        for page in list(self.card_pages.values()):
+            try:
+                page.destroy()
+            except Exception:
+                pass
+
+        self.card_pages.clear()
+        self.card_tab_by_key.clear()
+        self.card_key_by_tab.clear()
+        self.card_tab_order.clear()
 
         try:
             self.thumbnail_executor.shutdown(

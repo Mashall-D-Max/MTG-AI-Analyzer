@@ -1,16 +1,17 @@
 import threading
+from pathlib import Path
 
 import customtkinter as ctk
 
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 from analyzer.deck_analyzer import DeckAnalyzer
 from api.scryfall import get_card
-from gui.card_panel import CardPanel
 from gui.deck_analysis_panel import DeckAnalysisPanel
 from gui.deck_list_panel import DeckListPanel
-from gui.image_panel import ImagePanel
+from gui.deck_save_dialog import DeckSaveDialog
 from gui.meta_panel import MetaPanel
+from gui.saved_decks_panel import SavedDecksPanel
 from gui.search_panel import SearchPanel
 from gui.status_bar import StatusBar
 from importers.import_manager import ImportManager
@@ -19,8 +20,12 @@ from meta.meta_compare import MetaCompare
 from models.deck import Deck
 from providers.mtgdecks_provider import MTGDecksProvider
 from services.deck_export_service import DeckExportService
-from services.image_service import load_card_image
-from services.scryfall_thumbnail_service import ScryfallThumbnailService
+from services.deck_format_validator import DeckFormatValidator
+from services.deck_save_service import DeckSaveService
+from services.saved_deck_library import (
+    SavedDeckEntry,
+    SavedDeckLibraryService,
+)
 from utils.text_shortcuts import bind_text_shortcuts
 
 ctk.set_appearance_mode("dark")
@@ -60,9 +65,11 @@ class App(ctk.CTk):
         self.last_comparison = None
         self.last_upgraded_deck_text = None
         self.paste_window = None
+        self.deck_save_dialog = None
 
-        self.scryfall_thumbnail_service = ScryfallThumbnailService()
-        self.card_request_id = 0
+        self.current_deck_name = "Новая колода"
+        self.current_deck_format = DeckFormatValidator.NO_FORMAT
+        self.current_export_format = "Arena TXT"
 
         self.title_label = ctk.CTkLabel(
             self,
@@ -100,45 +107,14 @@ class App(ctk.CTk):
     # ======================================================
 
     def _build_search_tab(self):
-        top_panel = ctk.CTkFrame(self.search_tab)
-        top_panel.pack(
-            fill="x",
-            padx=10,
-            pady=10,
-        )
-
         self.search_panel = SearchPanel(
-            master=top_panel,
+            master=self.search_tab,
             search_callback=self.search_card,
             add_to_deck_callback=(
                 self.add_scryfall_card_to_deck
             ),
         )
         self.search_panel.pack(
-            side="left",
-            padx=10,
-            pady=10,
-        )
-
-        content = ctk.CTkFrame(self.search_tab)
-        content.pack(
-            fill="both",
-            expand=True,
-            padx=10,
-            pady=10,
-        )
-
-        self.image_panel = ImagePanel(content)
-        self.image_panel.pack(
-            side="left",
-            fill="y",
-            padx=10,
-            pady=10,
-        )
-
-        self.card_panel = CardPanel(content)
-        self.card_panel.pack(
-            side="left",
             fill="both",
             expand=True,
             padx=10,
@@ -150,7 +126,27 @@ class App(ctk.CTk):
     # ======================================================
 
     def _build_deck_tab(self):
-        top_panel = ctk.CTkFrame(self.deck_tab)
+        self.deck_tabs = ctk.CTkTabview(
+            self.deck_tab,
+            command=self._on_deck_subtab_changed,
+        )
+        self.deck_tabs.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+        self.current_deck_tab = self.deck_tabs.add(
+            "Текущая колода"
+        )
+        self.saved_decks_tab = self.deck_tabs.add(
+            "Сохранённые колоды"
+        )
+
+        top_panel = ctk.CTkFrame(
+            self.current_deck_tab
+        )
         top_panel.pack(
             fill="x",
             padx=10,
@@ -181,10 +177,25 @@ class App(ctk.CTk):
             pady=10,
         )
 
+        self.save_deck_button = ctk.CTkButton(
+            top_panel,
+            text="Сохранить колоду",
+            command=self.open_save_deck_dialog,
+            width=155,
+            state="disabled",
+        )
+        self.save_deck_button.pack(
+            side="left",
+            padx=8,
+            pady=10,
+        )
+
         self.deck_mtgdecks_url_entry = ctk.CTkEntry(
             top_panel,
             width=460,
-            placeholder_text="URL MTGDecks для загрузки колоды...",
+            placeholder_text=(
+                "URL MTGDecks для загрузки колоды..."
+            ),
         )
         self.deck_mtgdecks_url_entry.pack(
             side="left",
@@ -193,8 +204,9 @@ class App(ctk.CTk):
             padx=8,
             pady=10,
         )
-
-        bind_text_shortcuts(self.deck_mtgdecks_url_entry)
+        bind_text_shortcuts(
+            self.deck_mtgdecks_url_entry
+        )
 
         self.load_mtgdecks_button = ctk.CTkButton(
             top_panel,
@@ -208,7 +220,9 @@ class App(ctk.CTk):
             pady=10,
         )
 
-        content = ctk.CTkFrame(self.deck_tab)
+        content = ctk.CTkFrame(
+            self.current_deck_tab
+        )
         content.pack(
             fill="both",
             expand=True,
@@ -228,13 +242,109 @@ class App(ctk.CTk):
             pady=10,
         )
 
-        self.deck_analysis_panel = DeckAnalysisPanel(content)
+        self.deck_analysis_panel = DeckAnalysisPanel(
+            content
+        )
         self.deck_analysis_panel.pack(
             side="left",
             fill="both",
             expand=True,
             padx=10,
             pady=10,
+        )
+
+        self.saved_decks_panel = SavedDecksPanel(
+            master=self.saved_decks_tab,
+            on_open_deck=self.open_saved_deck,
+        )
+        self.saved_decks_panel.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10,
+        )
+
+        self.deck_tabs.set("Текущая колода")
+
+    def _on_deck_subtab_changed(self):
+        if self.deck_tabs.get() == "Сохранённые колоды":
+            self.saved_decks_panel.refresh()
+
+    def open_saved_deck(self, entry):
+        if not isinstance(entry, SavedDeckEntry):
+            self.status.label.configure(
+                text="Не удалось открыть сохранённую колоду"
+            )
+            return
+
+        self.tabs.set("Колода")
+        self.deck_tabs.set("Текущая колода")
+        self._set_deck_buttons_state("disabled")
+        self.status.label.configure(
+            text=f"Загрузка сохранённой колоды: {entry.deck_name}..."
+        )
+
+        self._run_background(
+            target=self._load_saved_deck_worker,
+            args=(entry,),
+        )
+
+    def _load_saved_deck_worker(self, entry):
+        try:
+            deck = SavedDeckLibraryService.load_deck(entry)
+            analysis = DeckAnalyzer(deck).analyze()
+
+            self.after(
+                0,
+                self._on_saved_deck_loaded,
+                entry,
+                deck,
+                analysis,
+            )
+        except Exception as error:
+            self.after(
+                0,
+                self._on_saved_deck_error,
+                str(error),
+            )
+
+    def _on_saved_deck_loaded(
+        self,
+        entry,
+        deck,
+        analysis,
+    ):
+        self.current_deck = deck
+        self.current_deck_name = entry.deck_name
+        self.current_deck_format = entry.game_format
+        self.current_export_format = (
+            entry.export_format_label
+        )
+
+        self.last_reference_deck = None
+        self.last_comparison = None
+        self.last_upgraded_deck_text = None
+
+        self.deck_list_panel.show_deck(deck)
+        self.deck_analysis_panel.show_analysis(analysis)
+        self._set_deck_buttons_state("normal")
+
+        self.status.label.configure(
+            text=(
+                f"Сохранённая колода открыта: "
+                f"{entry.deck_name}. "
+                f"Mainboard: {deck.mainboard_size}, "
+                f"Sideboard: {deck.sideboard_size}"
+            )
+        )
+
+    def _on_saved_deck_error(self, message):
+        self._set_deck_buttons_state("normal")
+        self.status.label.configure(
+            text=(
+                "Ошибка загрузки сохранённой колоды: "
+                f"{message}"
+            )
         )
 
     # ======================================================
@@ -432,238 +542,40 @@ class App(ctk.CTk):
         )
 
     # ======================================================
-    # Card search
+    # Card browser
     # ======================================================
 
     def search_card(self, card_source):
         """
-        Открывает карту в нижней области вкладки поиска.
+        Совместимый callback для старых компонентов.
 
-        card_source может быть:
-        - строкой с названием карты;
-        - исходным JSON конкретного издания Scryfall.
-
-        При передаче JSON сохраняются точный набор, язык,
-        номер коллекционера и изображение выбранного издания.
+        JSON Scryfall открывается во встроенной вкладке карты.
+        Строка запускает обычный поиск в SearchPanel.
         """
-
-        self.card_request_id += 1
-        request_id = self.card_request_id
 
         self.tabs.set("Поиск карт")
 
-        self.card_panel.show_loading()
-        self.image_panel.show_loading()
-
         if isinstance(card_source, dict):
-            card_name = str(
-                card_source.get("name", "")
-            ).strip()
-
-            if not card_name:
-                self._on_card_error(
-                    "У выбранного издания отсутствует название",
-                    request_id,
-                )
-                return
-
-            set_code = str(
-                card_source.get("set", "")
-            ).upper().strip()
-
-            collector_number = str(
-                card_source.get("collector_number", "")
-            ).strip()
-
-            printing_parts = [card_name]
-
-            if set_code:
-                printing_parts.append(f"[{set_code}]")
-
-            if collector_number:
-                printing_parts.append(f"№ {collector_number}")
-
-            self.status.label.configure(
-                text=(
-                    "Загрузка выбранного издания: "
-                    + " ".join(printing_parts)
-                )
-            )
-
-            self._run_background(
-                target=self._load_scryfall_printing_worker,
-                args=(
-                    card_source,
-                    request_id,
-                ),
-            )
+            self.search_panel.open_card_page(card_source)
             return
 
-        card_name = str(card_source).strip()
+        card_name = str(card_source or "").strip()
 
         if not card_name:
-            self._on_card_error(
-                "Введите название карты",
-                request_id,
+            self.status.label.configure(
+                text="Введите название карты"
             )
             return
 
-        self.status.label.configure(
-            text=f"Загрузка карты: {card_name}"
+        self.search_panel.quick_query_entry.delete(
+            0,
+            "end",
         )
-
-        self._run_background(
-            target=self._search_card_worker,
-            args=(
-                card_name,
-                request_id,
-            ),
+        self.search_panel.quick_query_entry.insert(
+            0,
+            card_name,
         )
-
-    def _load_scryfall_printing_worker(
-        self,
-        card_data,
-        request_id,
-    ):
-        try:
-            image = (
-                self.scryfall_thumbnail_service
-                .load_thumbnail(
-                    card_data=card_data,
-                    size=(500, 700),
-                )
-            )
-
-            self.after(
-                0,
-                self._on_scryfall_printing_loaded,
-                card_data,
-                image,
-                request_id,
-            )
-
-        except Exception as error:
-            self.after(
-                0,
-                self._on_card_error,
-                str(error),
-                request_id,
-            )
-
-    def _search_card_worker(
-        self,
-        card_name,
-        request_id,
-    ):
-        try:
-            card = get_card(card_name)
-
-            if card is None:
-                self.after(
-                    0,
-                    self._on_card_not_found,
-                    request_id,
-                )
-                return
-
-            image = load_card_image(card)
-
-            self.after(
-                0,
-                self._on_card_loaded,
-                card,
-                image,
-                request_id,
-            )
-
-        except Exception as error:
-            self.after(
-                0,
-                self._on_card_error,
-                str(error),
-                request_id,
-            )
-
-    def _on_scryfall_printing_loaded(
-        self,
-        card_data,
-        image,
-        request_id,
-    ):
-        if request_id != self.card_request_id:
-            return
-
-        self.card_panel.show_card(card_data)
-        self.image_panel.show_image(image)
-
-        card_name = str(
-            card_data.get("name", "Без названия")
-        )
-
-        set_code = str(
-            card_data.get("set", "")
-        ).upper().strip()
-
-        collector_number = str(
-            card_data.get("collector_number", "")
-        ).strip()
-
-        printing = ""
-
-        if set_code:
-            printing += f" [{set_code}]"
-
-        if collector_number:
-            printing += f" № {collector_number}"
-
-        self.status.label.configure(
-            text=(
-                "Загружено выбранное издание: "
-                f"{card_name}{printing}"
-            )
-        )
-
-    def _on_card_loaded(
-        self,
-        card,
-        image,
-        request_id,
-    ):
-        if request_id != self.card_request_id:
-            return
-
-        self.card_panel.show_card(card)
-        self.image_panel.show_image(image)
-
-        self.status.label.configure(
-            text=f"Загружена карта: {card.name}"
-        )
-
-    def _on_card_not_found(self, request_id):
-        if request_id != self.card_request_id:
-            return
-
-        self.card_panel.show_error("Карта не найдена")
-        self.image_panel.show_error("Изображение не найдено")
-
-        self.status.label.configure(
-            text="Карта не найдена"
-        )
-
-    def _on_card_error(
-        self,
-        message,
-        request_id,
-    ):
-        if request_id != self.card_request_id:
-            return
-
-        self.card_panel.show_error(message)
-        self.image_panel.show_error()
-
-        self.status.label.configure(
-            text=f"Ошибка загрузки карты: {message}"
-        )
+        self.search_panel.search_quick()
 
     # ======================================================
     # Add Scryfall card to deck
@@ -791,6 +703,8 @@ class App(ctk.CTk):
         try:
             if self.current_deck is None:
                 self.current_deck = Deck()
+                self.current_deck_name = "Новая колода"
+                self.current_deck_format = DeckFormatValidator.NO_FORMAT
 
             if zone == "sideboard":
                 deck_card = (
@@ -832,6 +746,7 @@ class App(ctk.CTk):
             )
 
             self.tabs.set("Колода")
+            self.deck_tabs.set("Текущая колода")
 
             printing_label = str(
                 getattr(
@@ -872,6 +787,153 @@ class App(ctk.CTk):
         )
 
     # ======================================================
+    # Deck save and format validation
+    # ======================================================
+
+    def open_save_deck_dialog(self):
+        if self.current_deck is None or self.current_deck.total_size <= 0:
+            self.status.label.configure(
+                text="Сначала загрузите или соберите колоду"
+            )
+            return
+
+        if (
+            self.deck_save_dialog is not None
+            and self.deck_save_dialog.winfo_exists()
+        ):
+            self.deck_save_dialog.focus_force()
+            self.deck_save_dialog.lift()
+            return
+
+        self.deck_save_dialog = DeckSaveDialog(
+            master=self,
+            deck=self.current_deck,
+            default_name=self.current_deck_name,
+            default_game_format=self.current_deck_format,
+            default_export_format=self.current_export_format,
+            on_save_internal=self._save_deck_internal,
+            on_save_as=self._save_deck_as,
+        )
+
+    def _save_deck_internal(
+        self,
+        deck_name,
+        game_format,
+        export_format,
+        allow_invalid=False,
+    ):
+        path = DeckSaveService.build_internal_path(
+            deck_name=deck_name,
+            game_format=game_format,
+            export_format=export_format,
+        )
+
+        if path.exists():
+            overwrite = messagebox.askyesno(
+                title="Файл уже существует",
+                message=(
+                    f"Колода уже сохранена:\n{path}\n\n"
+                    "Перезаписать файл?"
+                ),
+                parent=self.deck_save_dialog,
+            )
+
+            if not overwrite:
+                return None
+
+        saved_path = DeckSaveService.save_internal(
+            deck=self.current_deck,
+            deck_name=deck_name,
+            game_format=game_format,
+            export_format=export_format,
+        )
+
+        self._remember_deck_save_settings(
+            deck_name=deck_name,
+            game_format=game_format,
+            export_format=export_format,
+        )
+
+        draft_suffix = (
+            " как незавершённый черновик"
+            if allow_invalid
+            else ""
+        )
+
+        self.status.label.configure(
+            text=f"Колода сохранена{draft_suffix}: {saved_path}"
+        )
+
+        if hasattr(self, "saved_decks_panel"):
+            self.saved_decks_panel.refresh()
+
+        return saved_path
+
+    def _save_deck_as(
+        self,
+        deck_name,
+        game_format,
+        export_format,
+        allow_invalid=False,
+    ):
+        initial_filename = DeckSaveService.build_filename(
+            deck_name=deck_name,
+            export_format=export_format,
+        )
+
+        selected_path = filedialog.asksaveasfilename(
+            parent=self.deck_save_dialog,
+            title="Сохранить колоду как",
+            initialfile=initial_filename,
+            defaultextension=".txt",
+            filetypes=[
+                ("Текстовая колода", "*.txt"),
+                ("Все файлы", "*.*"),
+            ],
+        )
+
+        if not selected_path:
+            return None
+
+        saved_path = DeckSaveService.save_to_path(
+            deck=self.current_deck,
+            deck_name=deck_name,
+            game_format=game_format,
+            export_format=export_format,
+            path=selected_path,
+        )
+
+        self._remember_deck_save_settings(
+            deck_name=deck_name,
+            game_format=game_format,
+            export_format=export_format,
+        )
+
+        draft_suffix = (
+            " как незавершённый черновик"
+            if allow_invalid
+            else ""
+        )
+
+        self.status.label.configure(
+            text=f"Колода сохранена{draft_suffix}: {saved_path}"
+        )
+
+        return saved_path
+
+    def _remember_deck_save_settings(
+        self,
+        deck_name,
+        game_format,
+        export_format,
+    ):
+        self.current_deck_name = DeckSaveService.sanitize_deck_name(
+            deck_name
+        )
+        self.current_deck_format = str(game_format)
+        self.current_export_format = str(export_format)
+
+    # ======================================================
     # Deck import
     # ======================================================
 
@@ -886,6 +948,9 @@ class App(ctk.CTk):
 
         if not filename:
             return
+
+        self.current_deck_name = Path(filename).stem or "Новая колода"
+        self.current_deck_format = DeckFormatValidator.NO_FORMAT
 
         self.analyze_deck_source(
             filename,
@@ -990,6 +1055,9 @@ Sideboard
             self.status.label.configure(text="Вставленный decklist пустой")
             return
 
+        self.current_deck_name = "Вставленная колода"
+        self.current_deck_format = DeckFormatValidator.NO_FORMAT
+
         self.analyze_deck_source(
             deck_text,
             success_prefix="Колода загружена из текста.",
@@ -1007,6 +1075,9 @@ Sideboard
             )
             return
 
+        self.current_deck_name = "MTGDecks колода"
+        self.current_deck_format = DeckFormatValidator.NO_FORMAT
+
         self.analyze_deck_source(
             url,
             success_prefix="Колода загружена с MTGDecks.",
@@ -1018,6 +1089,7 @@ Sideboard
         success_prefix,
     ):
         self.tabs.set("Колода")
+        self.deck_tabs.set("Текущая колода")
 
         self.status.label.configure(text="Загрузка и анализ колоды...")
 
@@ -1281,6 +1353,9 @@ Sideboard
 
         upgraded_deck_text = self.last_upgraded_deck_text
 
+        self.current_deck_name = "Обновлённая колода"
+        self.current_deck_format = DeckFormatValidator.NO_FORMAT
+
         self.analyze_deck_source(
             source=upgraded_deck_text,
             success_prefix=("Обновлённая колода открыта в анализе."),
@@ -1394,6 +1469,18 @@ Sideboard
         self.open_deck_button.configure(state=state)
         self.paste_deck_button.configure(state=state)
         self.load_mtgdecks_button.configure(state=state)
+
+        if state == "disabled":
+            self.save_deck_button.configure(state="disabled")
+        else:
+            self.save_deck_button.configure(
+                state=(
+                    "normal"
+                    if self.current_deck is not None
+                    and self.current_deck.total_size > 0
+                    else "disabled"
+                )
+            )
 
         if state == "disabled":
             self.compare_mtgdecks_button.configure(state="disabled")

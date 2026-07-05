@@ -1,16 +1,13 @@
 import customtkinter as ctk
 
-from gui.scryfall_card_preview import (
-    ScryfallCardPreview,
-)
-
 
 class ScryfallCardTile(ctk.CTkFrame):
     """
     Визуальная карточка результата поиска Scryfall.
 
     Один щелчок выбирает карту.
-    Двойной щелчок открывает подробный просмотр.
+    Двойной щелчок открывает карту в новой вкладке,
+    как страницу в браузере.
     """
 
     NORMAL_BORDER_COLOR = (
@@ -40,9 +37,7 @@ class ScryfallCardTile(ctk.CTkFrame):
             height=height,
             corner_radius=10,
             border_width=2,
-            border_color=(
-                self.NORMAL_BORDER_COLOR
-            ),
+            border_color=self.NORMAL_BORDER_COLOR,
         )
 
         self.card_data = card_data
@@ -53,17 +48,10 @@ class ScryfallCardTile(ctk.CTkFrame):
 
         self.card_image = None
         self.is_selected = False
-        self.preview_window = None
 
         self.grid_propagate(False)
-        self.grid_columnconfigure(
-            0,
-            weight=1,
-        )
-        self.grid_rowconfigure(
-            0,
-            weight=1,
-        )
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
         self.image_frame = ctk.CTkFrame(
             self,
@@ -78,16 +66,11 @@ class ScryfallCardTile(ctk.CTkFrame):
             pady=(7, 4),
             sticky="nsew",
         )
-        self.image_frame.grid_propagate(
-            False
-        )
+        self.image_frame.grid_propagate(False)
 
         self.image_label = ctk.CTkLabel(
             self.image_frame,
-            text=(
-                "Загрузка\n"
-                "изображения..."
-            ),
+            text="Загрузка\nизображения...",
             justify="center",
         )
         self.image_label.pack(
@@ -98,23 +81,13 @@ class ScryfallCardTile(ctk.CTkFrame):
         )
 
         card_name = str(
-            card_data.get(
-                "name",
-                "",
-            )
-        ).strip()
-
-        if not card_name:
-            card_name = "Без названия"
+            card_data.get("name", "")
+        ).strip() or "Без названия"
 
         self.name_label = ctk.CTkLabel(
             self,
             text=card_name,
-            font=(
-                "Arial",
-                13,
-                "bold",
-            ),
+            font=("Arial", 13, "bold"),
             justify="center",
             wraplength=172,
         )
@@ -127,25 +100,14 @@ class ScryfallCardTile(ctk.CTkFrame):
         )
 
         set_code = str(
-            card_data.get(
-                "set",
-                "",
-            )
-        ).upper()
-
+            card_data.get("set", "")
+        ).upper().strip()
         rarity = str(
-            card_data.get(
-                "rarity",
-                "",
-            )
-        ).capitalize()
-
+            card_data.get("rarity", "")
+        ).capitalize().strip()
         collector_number = str(
-            card_data.get(
-                "collector_number",
-                "",
-            )
-        )
+            card_data.get("collector_number", "")
+        ).strip()
 
         details = []
 
@@ -153,9 +115,7 @@ class ScryfallCardTile(ctk.CTkFrame):
             details.append(set_code)
 
         if collector_number:
-            details.append(
-                f"№ {collector_number}"
-            )
+            details.append(f"№ {collector_number}")
 
         if rarity:
             details.append(rarity)
@@ -163,10 +123,7 @@ class ScryfallCardTile(ctk.CTkFrame):
         self.details_label = ctk.CTkLabel(
             self,
             text=" · ".join(details),
-            font=(
-                "Arial",
-                11,
-            ),
+            font=("Arial", 11),
             text_color=(
                 "#555555",
                 "#b0b0b0",
@@ -189,19 +146,11 @@ class ScryfallCardTile(ctk.CTkFrame):
             self.show_image_error()
             return
 
-        image_width, image_height = (
-            pil_image.size
-        )
-
         self.card_image = ctk.CTkImage(
             light_image=pil_image,
             dark_image=pil_image,
-            size=(
-                image_width,
-                image_height,
-            ),
+            size=pil_image.size,
         )
-
         self.image_label.configure(
             image=self.card_image,
             text="",
@@ -209,18 +158,13 @@ class ScryfallCardTile(ctk.CTkFrame):
 
     def show_image_error(self):
         self.card_image = None
-
         self.image_label.configure(
             image=None,
-            text=(
-                "Изображение\n"
-                "недоступно"
-            ),
+            text="Изображение\nнедоступно",
         )
 
     def set_selected(self, selected):
         self.is_selected = bool(selected)
-
         self.configure(
             border_color=(
                 self.SELECTED_BORDER_COLOR
@@ -246,7 +190,7 @@ class ScryfallCardTile(ctk.CTkFrame):
             )
             widget.bind(
                 "<Double-Button-1>",
-                self._handle_preview,
+                self._handle_open,
                 add="+",
             )
 
@@ -254,31 +198,11 @@ class ScryfallCardTile(ctk.CTkFrame):
         if self.on_select is not None:
             self.on_select(self.index)
 
-    def _handle_preview(self, event=None):
+    def _handle_open(self, event=None):
         if self.on_select is not None:
             self.on_select(self.index)
 
-        if (
-            self.preview_window is not None
-            and self.preview_window.winfo_exists()
-        ):
-            self.preview_window.focus_force()
-            self.preview_window.lift()
-            return "break"
-
-        self.preview_window = ScryfallCardPreview(
-            master=self,
-            card_data=self.card_data,
-            on_open_in_analyzer=(
-                self._open_in_analyzer
-            ),
-            on_add_to_deck=(
-                self.on_add_to_deck
-            ),
-        )
-
-        return "break"
-
-    def _open_in_analyzer(self):
         if self.on_open is not None:
             self.on_open(self.index)
+
+        return "break"
