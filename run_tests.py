@@ -10,6 +10,7 @@ TESTS = [
     "test_scryfall_thumbnail_service.py",
     "test_scryfall_card_preview.py",
     "test_deck_add_card.py",
+    "test_deck_editing.py",
     "test_compare_advisor.py",
     "test_meta_compare_basic.py",
     "test_meta_compare_zones.py",

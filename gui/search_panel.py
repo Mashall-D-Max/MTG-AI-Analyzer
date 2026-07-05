@@ -154,6 +154,7 @@ class SearchPanel(ctk.CTkFrame):
         self,
         master,
         search_callback,
+        add_to_deck_callback=None,
     ):
         super().__init__(
             master,
@@ -161,6 +162,9 @@ class SearchPanel(ctk.CTkFrame):
         )
 
         self.search_callback = search_callback
+        self.add_to_deck_callback = (
+            add_to_deck_callback
+        )
 
         self.client = ScryfallSearchClient()
 
@@ -1998,6 +2002,9 @@ class SearchPanel(ctk.CTkFrame):
                 index=index,
                 on_select=self._select_result,
                 on_open=self._open_result_by_index,
+                on_add_to_deck=(
+                    self.add_to_deck_callback
+                ),
                 width=self.RESULT_TILE_WIDTH,
                 height=self.RESULT_TILE_HEIGHT,
             )

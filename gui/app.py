@@ -16,6 +16,7 @@ from gui.status_bar import StatusBar
 from importers.import_manager import ImportManager
 from meta.deck_upgrade_builder import DeckUpgradeBuilder
 from meta.meta_compare import MetaCompare
+from models.deck import Deck
 from providers.mtgdecks_provider import MTGDecksProvider
 from services.deck_export_service import DeckExportService
 from services.image_service import load_card_image
@@ -107,8 +108,11 @@ class App(ctk.CTk):
         )
 
         self.search_panel = SearchPanel(
-            top_panel,
-            self.search_card,
+            master=top_panel,
+            search_callback=self.search_card,
+            add_to_deck_callback=(
+                self.add_scryfall_card_to_deck
+            ),
         )
         self.search_panel.pack(
             side="left",
@@ -212,7 +216,10 @@ class App(ctk.CTk):
             pady=10,
         )
 
-        self.deck_list_panel = DeckListPanel(content)
+        self.deck_list_panel = DeckListPanel(
+            master=content,
+            on_deck_changed=self._on_deck_edited,
+        )
         self.deck_list_panel.pack(
             side="left",
             fill="both",
@@ -449,7 +456,9 @@ class App(ctk.CTk):
         self.image_panel.show_loading()
 
         if isinstance(card_source, dict):
-            card_name = str(card_source.get("name", "")).strip()
+            card_name = str(
+                card_source.get("name", "")
+            ).strip()
 
             if not card_name:
                 self._on_card_error(
@@ -458,9 +467,13 @@ class App(ctk.CTk):
                 )
                 return
 
-            set_code = str(card_source.get("set", "")).upper().strip()
+            set_code = str(
+                card_source.get("set", "")
+            ).upper().strip()
 
-            collector_number = str(card_source.get("collector_number", "")).strip()
+            collector_number = str(
+                card_source.get("collector_number", "")
+            ).strip()
 
             printing_parts = [card_name]
 
@@ -471,7 +484,10 @@ class App(ctk.CTk):
                 printing_parts.append(f"№ {collector_number}")
 
             self.status.label.configure(
-                text=("Загрузка выбранного издания: " + " ".join(printing_parts))
+                text=(
+                    "Загрузка выбранного издания: "
+                    + " ".join(printing_parts)
+                )
             )
 
             self._run_background(
@@ -492,7 +508,9 @@ class App(ctk.CTk):
             )
             return
 
-        self.status.label.configure(text=f"Загрузка карты: {card_name}")
+        self.status.label.configure(
+            text=f"Загрузка карты: {card_name}"
+        )
 
         self._run_background(
             target=self._search_card_worker,
@@ -508,9 +526,12 @@ class App(ctk.CTk):
         request_id,
     ):
         try:
-            image = self.scryfall_thumbnail_service.load_thumbnail(
-                card_data=card_data,
-                size=(500, 700),
+            image = (
+                self.scryfall_thumbnail_service
+                .load_thumbnail(
+                    card_data=card_data,
+                    size=(500, 700),
+                )
             )
 
             self.after(
@@ -575,11 +596,17 @@ class App(ctk.CTk):
         self.card_panel.show_card(card_data)
         self.image_panel.show_image(image)
 
-        card_name = str(card_data.get("name", "Без названия"))
+        card_name = str(
+            card_data.get("name", "Без названия")
+        )
 
-        set_code = str(card_data.get("set", "")).upper().strip()
+        set_code = str(
+            card_data.get("set", "")
+        ).upper().strip()
 
-        collector_number = str(card_data.get("collector_number", "")).strip()
+        collector_number = str(
+            card_data.get("collector_number", "")
+        ).strip()
 
         printing = ""
 
@@ -590,7 +617,10 @@ class App(ctk.CTk):
             printing += f" № {collector_number}"
 
         self.status.label.configure(
-            text=("Загружено выбранное издание: " f"{card_name}{printing}")
+            text=(
+                "Загружено выбранное издание: "
+                f"{card_name}{printing}"
+            )
         )
 
     def _on_card_loaded(
@@ -605,7 +635,9 @@ class App(ctk.CTk):
         self.card_panel.show_card(card)
         self.image_panel.show_image(image)
 
-        self.status.label.configure(text=f"Загружена карта: {card.name}")
+        self.status.label.configure(
+            text=f"Загружена карта: {card.name}"
+        )
 
     def _on_card_not_found(self, request_id):
         if request_id != self.card_request_id:
@@ -614,7 +646,9 @@ class App(ctk.CTk):
         self.card_panel.show_error("Карта не найдена")
         self.image_panel.show_error("Изображение не найдено")
 
-        self.status.label.configure(text="Карта не найдена")
+        self.status.label.configure(
+            text="Карта не найдена"
+        )
 
     def _on_card_error(
         self,
@@ -627,7 +661,215 @@ class App(ctk.CTk):
         self.card_panel.show_error(message)
         self.image_panel.show_error()
 
-        self.status.label.configure(text=f"Ошибка загрузки карты: {message}")
+        self.status.label.configure(
+            text=f"Ошибка загрузки карты: {message}"
+        )
+
+    # ======================================================
+    # Add Scryfall card to deck
+    # ======================================================
+
+    def add_scryfall_card_to_deck(
+        self,
+        card_data,
+        quantity=1,
+        zone="mainboard",
+    ):
+        """
+        Добавляет выбранное издание Scryfall в текущую колоду.
+
+        Модель карты загружается через существующий Scryfall-клиент,
+        а JSON выбранного издания сохраняется в DeckCard.printing_data.
+        """
+
+        if not isinstance(card_data, dict):
+            self.status.label.configure(
+                text="Не удалось добавить карту: неверные данные"
+            )
+            return False
+
+        card_name = str(
+            card_data.get("name", "")
+        ).strip()
+
+        if not card_name:
+            self.status.label.configure(
+                text="Не удалось добавить карту без названия"
+            )
+            return False
+
+        try:
+            quantity = int(quantity)
+        except (
+            TypeError,
+            ValueError,
+        ):
+            self.status.label.configure(
+                text="Количество карты должно быть целым числом"
+            )
+            return False
+
+        if quantity <= 0:
+            self.status.label.configure(
+                text="Количество карты должно быть больше нуля"
+            )
+            return False
+
+        normalized_zone = str(zone).strip().lower()
+
+        if normalized_zone not in {
+            "mainboard",
+            "sideboard",
+        }:
+            normalized_zone = "mainboard"
+
+        zone_name = (
+            "Sideboard"
+            if normalized_zone == "sideboard"
+            else "Mainboard"
+        )
+
+        self.status.label.configure(
+            text=(
+                f"Добавление {quantity} × {card_name} "
+                f"в {zone_name}..."
+            )
+        )
+
+        self._run_background(
+            target=self._add_scryfall_card_worker,
+            args=(
+                dict(card_data),
+                quantity,
+                normalized_zone,
+            ),
+        )
+
+        return True
+
+    def _add_scryfall_card_worker(
+        self,
+        card_data,
+        quantity,
+        zone,
+    ):
+        try:
+            card_name = str(
+                card_data.get("name", "")
+            ).strip()
+
+            card = get_card(card_name)
+
+            if card is None:
+                raise ValueError(
+                    f"Карта не найдена: {card_name}"
+                )
+
+            self.after(
+                0,
+                self._on_scryfall_card_added,
+                card,
+                card_data,
+                quantity,
+                zone,
+            )
+
+        except Exception as error:
+            self.after(
+                0,
+                self._on_scryfall_card_add_error,
+                str(error),
+            )
+
+    def _on_scryfall_card_added(
+        self,
+        card,
+        card_data,
+        quantity,
+        zone,
+    ):
+        try:
+            if self.current_deck is None:
+                self.current_deck = Deck()
+
+            if zone == "sideboard":
+                deck_card = (
+                    self.current_deck
+                    .add_sideboard_card(
+                        card=card,
+                        quantity=quantity,
+                        printing_data=card_data,
+                    )
+                )
+                zone_name = "Sideboard"
+            else:
+                deck_card = (
+                    self.current_deck.add_card(
+                        card=card,
+                        quantity=quantity,
+                        printing_data=card_data,
+                    )
+                )
+                zone_name = "Mainboard"
+
+            analysis = DeckAnalyzer(
+                self.current_deck
+            ).analyze()
+
+            self.last_reference_deck = None
+            self.last_comparison = None
+            self.last_upgraded_deck_text = None
+
+            self.deck_list_panel.show_deck(
+                self.current_deck
+            )
+            self.deck_analysis_panel.show_analysis(
+                analysis
+            )
+
+            self._set_deck_buttons_state(
+                "normal"
+            )
+
+            self.tabs.set("Колода")
+
+            printing_label = str(
+                getattr(
+                    deck_card,
+                    "printing_label",
+                    "",
+                )
+            ).strip()
+
+            printing_suffix = (
+                f" {printing_label}"
+                if printing_label
+                else ""
+            )
+
+            self.status.label.configure(
+                text=(
+                    f"Добавлено {quantity} × {card.name}"
+                    f"{printing_suffix} в {zone_name}. "
+                    f"Теперь в зоне: {deck_card.quantity}."
+                )
+            )
+
+        except Exception as error:
+            self._on_scryfall_card_add_error(
+                str(error)
+            )
+
+    def _on_scryfall_card_add_error(
+        self,
+        message,
+    ):
+        self.status.label.configure(
+            text=(
+                "Ошибка добавления карты в колоду: "
+                f"{message}"
+            )
+        )
 
     # ======================================================
     # Deck import
@@ -845,6 +1087,71 @@ Sideboard
         self._set_deck_buttons_state("normal")
 
         self.status.label.configure(text=f"Ошибка загрузки колоды: {message}")
+
+    def _on_deck_edited(
+        self,
+        deck,
+        message,
+        is_error=False,
+    ):
+        """
+        Обновляет анализ после ручного редактирования колоды.
+
+        Любое изменение количества, удаление или перенос
+        карты делает старое сравнение и собранную обновлённую
+        колоду неактуальными.
+        """
+
+        self.current_deck = deck
+
+        if is_error:
+            self.status.label.configure(
+                text=str(message)
+            )
+            return
+
+        self.last_reference_deck = None
+        self.last_comparison = None
+        self.last_upgraded_deck_text = None
+
+        try:
+            if deck.total_size == 0:
+                self.deck_analysis_panel.show_error(
+                    "Колода пуста. Добавьте хотя бы одну карту."
+                )
+            else:
+                analysis = DeckAnalyzer(deck).analyze()
+                self.deck_analysis_panel.show_analysis(
+                    analysis
+                )
+
+            self._set_deck_buttons_state(
+                "normal"
+            )
+
+            self.status.label.configure(
+                text=(
+                    f"{message}. "
+                    f"Mainboard: {deck.mainboard_size}, "
+                    f"Sideboard: {deck.sideboard_size}"
+                )
+            )
+
+        except Exception as error:
+            self.deck_analysis_panel.show_error(
+                str(error)
+            )
+
+            self._set_deck_buttons_state(
+                "normal"
+            )
+
+            self.status.label.configure(
+                text=(
+                    "Колода изменена, но анализ "
+                    f"не обновлён: {error}"
+                )
+            )
 
     # ======================================================
     # Deck compare

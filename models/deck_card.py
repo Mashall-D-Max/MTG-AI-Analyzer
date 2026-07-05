@@ -72,6 +72,31 @@ class DeckCard:
         ).strip()
 
     @property
+    def printing_key(self):
+        """
+        Идентификатор конкретного издания.
+
+        Когда точные данные издания отсутствуют,
+        возвращается пустая строка. Это позволяет
+        объединять обычные импортированные строки
+        с картами того же названия.
+        """
+
+        if self.printing_id:
+            return f"id:{self.printing_id.casefold()}"
+
+        parts = [
+            self.set_code.casefold(),
+            self.collector_number.casefold(),
+            self.language.casefold(),
+        ]
+
+        if any(parts):
+            return "printing:" + "|".join(parts)
+
+        return ""
+
+    @property
     def printing_label(self):
         parts = []
 
@@ -108,6 +133,13 @@ class DeckCard:
 
         return self.quantity
 
+    def set_quantity(self, quantity):
+        self.quantity = self._normalize_quantity(
+            quantity
+        )
+
+        return self.quantity
+
     def set_printing_data_if_missing(
         self,
         printing_data,
@@ -120,6 +152,77 @@ class DeckCard:
                 printing_data
             )
         )
+
+    def matches(
+        self,
+        card_name,
+        printing_data=None,
+    ):
+        normalized_name = str(
+            card_name
+        ).strip().casefold()
+
+        if self.normalized_name != normalized_name:
+            return False
+
+        incoming_key = self._printing_key_from_data(
+            printing_data
+        )
+
+        current_key = self.printing_key
+
+        # Если хотя бы у одной строки нет точных данных,
+        # считаем совпадением карту с тем же названием.
+        if not incoming_key or not current_key:
+            return True
+
+        return incoming_key == current_key
+
+    @classmethod
+    def _printing_key_from_data(
+        cls,
+        printing_data,
+    ):
+        if not printing_data:
+            return ""
+
+        if not isinstance(printing_data, dict):
+            raise TypeError(
+                "Данные издания должны быть словарём"
+            )
+
+        printing_id = str(
+            printing_data.get("id", "")
+        ).strip()
+
+        if printing_id:
+            return f"id:{printing_id.casefold()}"
+
+        set_code = str(
+            printing_data.get("set", "")
+        ).strip().casefold()
+
+        collector_number = str(
+            printing_data.get(
+                "collector_number",
+                "",
+            )
+        ).strip().casefold()
+
+        language = str(
+            printing_data.get("lang", "")
+        ).strip().casefold()
+
+        parts = [
+            set_code,
+            collector_number,
+            language,
+        ]
+
+        if any(parts):
+            return "printing:" + "|".join(parts)
+
+        return ""
 
     @staticmethod
     def _normalize_quantity(quantity):
