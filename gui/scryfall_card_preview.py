@@ -6,10 +6,10 @@ from pathlib import Path
 
 import customtkinter as ctk
 import requests
-
 from PIL import Image, ImageOps
 
 from utils.text_shortcuts import bind_text_shortcuts
+
 
 LEGALITY_NAMES = {
     "standard": "Standard",
@@ -46,11 +46,6 @@ LEGALITY_STATUSES = {
 
 
 def build_card_details(card_data):
-    """
-    Формирует текстовое описание карты
-    из исходного JSON Scryfall.
-    """
-
     if not isinstance(card_data, dict):
         return "Некорректные данные карты."
 
@@ -87,7 +82,9 @@ def build_card_details(card_data):
                 )
             ).strip()
 
-            lines.append(f"=== {face_name} ===")
+            lines.append(
+                f"=== {face_name} ==="
+            )
 
             _append_card_characteristics(
                 lines=lines,
@@ -110,16 +107,12 @@ def build_card_details(card_data):
         )
     ).strip()
 
-    set_code = (
-        str(
-            card_data.get(
-                "set",
-                "",
-            )
+    set_code = str(
+        card_data.get(
+            "set",
+            "",
         )
-        .upper()
-        .strip()
-    )
+    ).upper().strip()
 
     collector_number = str(
         card_data.get(
@@ -137,10 +130,15 @@ def build_card_details(card_data):
         set_parts.append(f"[{set_code}]")
 
     if collector_number:
-        set_parts.append(f"№ {collector_number}")
+        set_parts.append(
+            f"№ {collector_number}"
+        )
 
     if set_parts:
-        lines.append("Набор: " + " ".join(set_parts))
+        lines.append(
+            "Набор: "
+            + " ".join(set_parts)
+        )
 
     released_at = str(
         card_data.get(
@@ -150,7 +148,9 @@ def build_card_details(card_data):
     ).strip()
 
     if released_at:
-        lines.append(f"Дата выпуска: {released_at}")
+        lines.append(
+            f"Дата выпуска: {released_at}"
+        )
 
     rarity = str(
         card_data.get(
@@ -160,7 +160,9 @@ def build_card_details(card_data):
     ).strip()
 
     if rarity:
-        lines.append(f"Редкость: {rarity.capitalize()}")
+        lines.append(
+            f"Редкость: {rarity.capitalize()}"
+        )
 
     language = str(
         card_data.get(
@@ -170,7 +172,9 @@ def build_card_details(card_data):
     ).strip()
 
     if language:
-        lines.append(f"Язык: {language}")
+        lines.append(
+            f"Язык: {language}"
+        )
 
     artist = str(
         card_data.get(
@@ -180,24 +184,8 @@ def build_card_details(card_data):
     ).strip()
 
     if artist:
-        lines.append(f"Художник: {artist}")
-
-    games = card_data.get(
-        "games",
-        [],
-    )
-
-    if isinstance(games, list) and games:
-        lines.append("Доступна в: " + ", ".join(str(game) for game in games))
-
-    finishes = card_data.get(
-        "finishes",
-        [],
-    )
-
-    if isinstance(finishes, list) and finishes:
         lines.append(
-            "Варианты печати: " + ", ".join(str(finish) for finish in finishes)
+            f"Художник: {artist}"
         )
 
     prices = card_data.get(
@@ -206,7 +194,9 @@ def build_card_details(card_data):
     )
 
     if isinstance(prices, dict):
-        price_lines = _build_price_lines(prices)
+        price_lines = _build_price_lines(
+            prices
+        )
 
         if price_lines:
             lines.append("")
@@ -219,27 +209,14 @@ def build_card_details(card_data):
     )
 
     if isinstance(legalities, dict):
-        legality_lines = _build_legality_lines(legalities)
+        legality_lines = _build_legality_lines(
+            legalities
+        )
 
         if legality_lines:
             lines.append("")
             lines.append("=== Легальность ===")
             lines.extend(legality_lines)
-
-    reserved = card_data.get("reserved")
-
-    if reserved:
-        lines.append("")
-        lines.append("Карта находится в Reserved List.")
-
-    promo_types = card_data.get(
-        "promo_types",
-        [],
-    )
-
-    if isinstance(promo_types, list) and promo_types:
-        lines.append("")
-        lines.append("Промо-типы: " + ", ".join(str(item) for item in promo_types))
 
     return "\n".join(lines).strip()
 
@@ -256,7 +233,9 @@ def _append_card_characteristics(
     ).strip()
 
     if mana_cost:
-        lines.append(f"Мана: {mana_cost}")
+        lines.append(
+            f"Мана: {mana_cost}"
+        )
 
     type_line = str(
         card_data.get(
@@ -266,7 +245,9 @@ def _append_card_characteristics(
     ).strip()
 
     if type_line:
-        lines.append(f"Тип: {type_line}")
+        lines.append(
+            f"Тип: {type_line}"
+        )
 
     oracle_text = str(
         card_data.get(
@@ -281,24 +262,33 @@ def _append_card_characteristics(
         lines.append(oracle_text)
 
     power = card_data.get("power")
-
     toughness = card_data.get("toughness")
 
-    if power is not None and toughness is not None:
+    if (
+        power is not None
+        and toughness is not None
+    ):
         lines.append("")
-        lines.append(f"Сила / выносливость: " f"{power} / {toughness}")
+        lines.append(
+            "Сила / выносливость: "
+            f"{power} / {toughness}"
+        )
 
     loyalty = card_data.get("loyalty")
 
     if loyalty is not None:
         lines.append("")
-        lines.append(f"Лояльность: {loyalty}")
+        lines.append(
+            f"Лояльность: {loyalty}"
+        )
 
     defense = card_data.get("defense")
 
     if defense is not None:
         lines.append("")
-        lines.append(f"Защита: {defense}")
+        lines.append(
+            f"Защита: {defense}"
+        )
 
 
 def _build_price_lines(prices):
@@ -322,7 +312,9 @@ def _build_price_lines(prices):
         ):
             continue
 
-        result.append(f"{label}: {value}")
+        result.append(
+            f"{label}: {value}"
+        )
 
     return result
 
@@ -347,18 +339,26 @@ def _build_legality_lines(legalities):
             status,
         )
 
-        result.append(f"{visible_name}: {visible_status}")
+        result.append(
+            f"{visible_name}: {visible_status}"
+        )
 
     return result
 
 
 class ScryfallCardPreview(ctk.CTkToplevel):
     """
-    Окно подробного просмотра конкретного
-    издания карты Scryfall.
+    Подробный просмотр конкретного издания карты.
+
+    Позволяет:
+    - открыть карту в обычной области анализа;
+    - добавить карту в Mainboard или Sideboard;
+    - открыть страницу издания на Scryfall.
     """
 
-    CACHE_DIRECTORY = Path("cache/scryfall_previews")
+    CACHE_DIRECTORY = Path(
+        "cache/scryfall_previews"
+    )
 
     IMAGE_SIZE = (
         360,
@@ -372,11 +372,17 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         master,
         card_data,
         on_open_in_analyzer=None,
+        on_add_to_deck=None,
     ):
         super().__init__(master)
 
         self.card_data = card_data
-        self.on_open_in_analyzer = on_open_in_analyzer
+        self.on_open_in_analyzer = (
+            on_open_in_analyzer
+        )
+        self.on_add_to_deck = (
+            on_add_to_deck
+        )
 
         self.preview_image = None
         self.image_thread = None
@@ -389,10 +395,12 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         )
 
         self.title(card_name)
-        self.geometry("1080x720")
-        self.minsize(900, 620)
+        self.geometry("1120x760")
+        self.minsize(940, 650)
 
-        self.transient(master.winfo_toplevel())
+        self.transient(
+            master.winfo_toplevel()
+        )
 
         self.protocol(
             "WM_DELETE_WINDOW",
@@ -403,12 +411,10 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             0,
             weight=0,
         )
-
         self.grid_columnconfigure(
             1,
             weight=1,
         )
-
         self.grid_rowconfigure(
             0,
             weight=1,
@@ -424,10 +430,6 @@ class ScryfallCardPreview(ctk.CTkToplevel):
 
         self.focus_force()
 
-    # ======================================================
-    # Интерфейс
-    # ======================================================
-
     def _build_image_panel(self):
         image_panel = ctk.CTkFrame(
             self,
@@ -442,12 +444,10 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         )
 
         image_panel.grid_propagate(False)
-
         image_panel.grid_rowconfigure(
             0,
             weight=1,
         )
-
         image_panel.grid_columnconfigure(
             0,
             weight=1,
@@ -455,7 +455,10 @@ class ScryfallCardPreview(ctk.CTkToplevel):
 
         self.image_label = ctk.CTkLabel(
             image_panel,
-            text=("Загрузка крупного\n" "изображения..."),
+            text=(
+                "Загрузка крупного\n"
+                "изображения..."
+            ),
             justify="center",
         )
         self.image_label.grid(
@@ -467,7 +470,9 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         )
 
     def _build_information_panel(self):
-        information_panel = ctk.CTkFrame(self)
+        information_panel = ctk.CTkFrame(
+            self
+        )
         information_panel.grid(
             row=0,
             column=1,
@@ -480,7 +485,6 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             0,
             weight=1,
         )
-
         information_panel.grid_rowconfigure(
             1,
             weight=1,
@@ -503,7 +507,7 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             ),
             justify="left",
             anchor="w",
-            wraplength=560,
+            wraplength=600,
         )
         title_label.grid(
             row=0,
@@ -529,32 +533,153 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             pady=8,
         )
 
-        bind_text_shortcuts(self.details_textbox)
+        bind_text_shortcuts(
+            self.details_textbox
+        )
 
         self.details_textbox.insert(
             "1.0",
-            build_card_details(self.card_data),
+            build_card_details(
+                self.card_data
+            ),
+        )
+        self.details_textbox.configure(
+            state="disabled"
         )
 
-        self.details_textbox.configure(state="disabled")
-
-        buttons_panel = ctk.CTkFrame(
-            information_panel,
-            fg_color="transparent",
+        self._build_deck_controls(
+            information_panel
         )
-        buttons_panel.grid(
+        self._build_action_buttons(
+            information_panel
+        )
+
+    def _build_deck_controls(
+        self,
+        parent,
+    ):
+        controls = ctk.CTkFrame(parent)
+        controls.grid(
             row=2,
             column=0,
             sticky="ew",
             padx=15,
-            pady=(8, 15),
+            pady=(8, 4),
+        )
+
+        controls.grid_columnconfigure(
+            5,
+            weight=1,
+        )
+
+        ctk.CTkLabel(
+            controls,
+            text="Количество:",
+        ).grid(
+            row=0,
+            column=0,
+            padx=(10, 5),
+            pady=10,
+        )
+
+        self.quantity_entry = ctk.CTkEntry(
+            controls,
+            width=70,
+            justify="center",
+        )
+        self.quantity_entry.grid(
+            row=0,
+            column=1,
+            padx=5,
+            pady=10,
+        )
+        self.quantity_entry.insert(
+            0,
+            "1",
+        )
+        bind_text_shortcuts(
+            self.quantity_entry
+        )
+
+        ctk.CTkLabel(
+            controls,
+            text="Зона:",
+        ).grid(
+            row=0,
+            column=2,
+            padx=(15, 5),
+            pady=10,
+        )
+
+        self.zone_combo = ctk.CTkComboBox(
+            controls,
+            values=[
+                "Mainboard",
+                "Sideboard",
+            ],
+            width=150,
+            state="readonly",
+        )
+        self.zone_combo.set("Mainboard")
+        self.zone_combo.grid(
+            row=0,
+            column=3,
+            padx=5,
+            pady=10,
+        )
+
+        self.add_to_deck_button = ctk.CTkButton(
+            controls,
+            text="Добавить в колоду",
+            command=self._add_to_deck,
+            width=170,
+            state=(
+                "normal"
+                if self.on_add_to_deck is not None
+                else "disabled"
+            ),
+        )
+        self.add_to_deck_button.grid(
+            row=0,
+            column=4,
+            padx=10,
+            pady=10,
+        )
+
+        self.deck_status_label = ctk.CTkLabel(
+            controls,
+            text="",
+            anchor="w",
+        )
+        self.deck_status_label.grid(
+            row=0,
+            column=5,
+            sticky="ew",
+            padx=(5, 10),
+            pady=10,
+        )
+
+    def _build_action_buttons(
+        self,
+        parent,
+    ):
+        buttons_panel = ctk.CTkFrame(
+            parent,
+            fg_color="transparent",
+        )
+        buttons_panel.grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            padx=15,
+            pady=(4, 15),
         )
 
         if self.on_open_in_analyzer is not None:
             open_analyzer_button = ctk.CTkButton(
                 buttons_panel,
                 text="Открыть в анализе",
-                command=(self._open_in_analyzer),
+                command=self._open_in_analyzer,
                 width=170,
             )
             open_analyzer_button.pack(
@@ -572,9 +697,13 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         self.open_scryfall_button = ctk.CTkButton(
             buttons_panel,
             text="Открыть на Scryfall",
-            command=(self._open_on_scryfall),
+            command=self._open_on_scryfall,
             width=180,
-            state=("normal" if scryfall_uri else "disabled"),
+            state=(
+                "normal"
+                if scryfall_uri
+                else "disabled"
+            ),
         )
         self.open_scryfall_button.pack(
             side="left",
@@ -592,16 +721,67 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             padx=(8, 0),
         )
 
-    # ======================================================
-    # Действия
-    # ======================================================
+    def _add_to_deck(self):
+        if self.on_add_to_deck is None:
+            return
+
+        quantity_text = (
+            self.quantity_entry.get().strip()
+        )
+
+        try:
+            quantity = int(quantity_text)
+        except (
+            TypeError,
+            ValueError,
+        ):
+            self.deck_status_label.configure(
+                text="Введите целое количество"
+            )
+            return
+
+        if quantity <= 0 or quantity > 99:
+            self.deck_status_label.configure(
+                text="Допустимо от 1 до 99"
+            )
+            return
+
+        zone = (
+            "sideboard"
+            if self.zone_combo.get() == "Sideboard"
+            else "mainboard"
+        )
+
+        accepted = self.on_add_to_deck(
+            self.card_data,
+            quantity,
+            zone,
+        )
+
+        if accepted is False:
+            self.deck_status_label.configure(
+                text="Добавление не выполнено"
+            )
+            return
+
+        zone_name = (
+            "Sideboard"
+            if zone == "sideboard"
+            else "Mainboard"
+        )
+
+        self.deck_status_label.configure(
+            text=(
+                f"Отправлено: {quantity} × "
+                f"в {zone_name}"
+            )
+        )
 
     def _open_in_analyzer(self):
         if self.on_open_in_analyzer is None:
             return
 
         self.on_open_in_analyzer()
-
         self.destroy()
 
     def _open_on_scryfall(self):
@@ -612,27 +792,19 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             )
         ).strip()
 
-        if not scryfall_uri:
-            return
-
-        webbrowser.open(scryfall_uri)
-
-    # ======================================================
-    # Изображение
-    # ======================================================
+        if scryfall_uri:
+            webbrowser.open(scryfall_uri)
 
     def _start_image_loading(self):
         self.image_thread = threading.Thread(
             target=self._image_worker,
             daemon=True,
         )
-
         self.image_thread.start()
 
     def _image_worker(self):
         try:
             image = self._load_preview_image()
-
         except Exception:
             image = None
 
@@ -658,7 +830,10 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         if image is None:
             self.image_label.configure(
                 image=None,
-                text=("Крупное изображение\n" "недоступно"),
+                text=(
+                    "Крупное изображение\n"
+                    "недоступно"
+                ),
             )
             return
 
@@ -689,13 +864,18 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             exist_ok=True,
         )
 
-        cache_path = self._get_cache_path(image_url)
+        cache_path = self._get_cache_path(
+            image_url
+        )
 
-        image = self._load_cached_image(cache_path)
+        image = self._load_cached_image(
+            cache_path
+        )
 
         if image is None:
-            image = self._download_image(image_url)
-
+            image = self._download_image(
+                image_url
+            )
             self._save_cached_image(
                 image=image,
                 cache_path=cache_path,
@@ -704,9 +884,9 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         return self._resize_image(image)
 
     def _get_preview_image_url(self):
-        image_uris = self.card_data.get("image_uris")
-
-        image_url = self._select_image_url(image_uris)
+        image_url = self._select_image_url(
+            self.card_data.get("image_uris")
+        )
 
         if image_url:
             return image_url
@@ -716,20 +896,16 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             [],
         )
 
-        if not isinstance(
-            card_faces,
-            list,
-        ):
+        if not isinstance(card_faces, list):
             return None
 
         for face in card_faces:
-            if not isinstance(
-                face,
-                dict,
-            ):
+            if not isinstance(face, dict):
                 continue
 
-            image_url = self._select_image_url(face.get("image_uris"))
+            image_url = self._select_image_url(
+                face.get("image_uris")
+            )
 
             if image_url:
                 return image_url
@@ -737,13 +913,8 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         return None
 
     @staticmethod
-    def _select_image_url(
-        image_uris,
-    ):
-        if not isinstance(
-            image_uris,
-            dict,
-        ):
+    def _select_image_url(image_uris):
+        if not isinstance(image_uris, dict):
             return None
 
         for image_size in (
@@ -752,17 +923,16 @@ class ScryfallCardPreview(ctk.CTkToplevel):
             "png",
             "small",
         ):
-            image_url = image_uris.get(image_size)
+            image_url = image_uris.get(
+                image_size
+            )
 
             if image_url:
                 return str(image_url).strip()
 
         return None
 
-    def _get_cache_path(
-        self,
-        image_url,
-    ):
+    def _get_cache_path(self, image_url):
         card_id = str(
             self.card_data.get(
                 "id",
@@ -780,23 +950,25 @@ class ScryfallCardPreview(ctk.CTkToplevel):
                 )
             ).hexdigest()
 
-        return self.CACHE_DIRECTORY / f"{cache_name}.png"
+        return (
+            self.CACHE_DIRECTORY
+            / f"{cache_name}.png"
+        )
 
     @staticmethod
-    def _load_cached_image(
-        cache_path,
-    ):
+    def _load_cached_image(cache_path):
         if not cache_path.exists():
             return None
 
         try:
-            with Image.open(cache_path) as cached_image:
-                image = ImageOps.exif_transpose(cached_image).convert("RGB")
-
+            with Image.open(
+                cache_path
+            ) as cached_image:
+                image = ImageOps.exif_transpose(
+                    cached_image
+                ).convert("RGB")
                 image.load()
-
                 return image
-
         except (
             OSError,
             ValueError,
@@ -805,19 +977,21 @@ class ScryfallCardPreview(ctk.CTkToplevel):
                 cache_path.unlink()
             except OSError:
                 pass
-
             return None
 
-    def _download_image(
-        self,
-        image_url,
-    ):
+    def _download_image(self, image_url):
         response = requests.get(
             image_url,
             headers={
-                "Accept": ("image/avif," "image/webp," "image/png," "image/jpeg"),
+                "Accept": (
+                    "image/avif,"
+                    "image/webp,"
+                    "image/png,"
+                    "image/jpeg"
+                ),
                 "User-Agent": (
-                    "MTG-AI-Analyzer/0.1 " "(desktop deck analysis application)"
+                    "MTG-AI-Analyzer/0.1 "
+                    "(desktop deck analysis application)"
                 ),
             },
             timeout=25,
@@ -825,11 +999,13 @@ class ScryfallCardPreview(ctk.CTkToplevel):
 
         response.raise_for_status()
 
-        with Image.open(BytesIO(response.content)) as downloaded_image:
-            image = ImageOps.exif_transpose(downloaded_image).convert("RGB")
-
+        with Image.open(
+            BytesIO(response.content)
+        ) as downloaded_image:
+            image = ImageOps.exif_transpose(
+                downloaded_image
+            ).convert("RGB")
             image.load()
-
             return image
 
     def _save_cached_image(
@@ -837,7 +1013,9 @@ class ScryfallCardPreview(ctk.CTkToplevel):
         image,
         cache_path,
     ):
-        temporary_path = cache_path.with_name(cache_path.name + ".tmp")
+        temporary_path = cache_path.with_name(
+            cache_path.name + ".tmp"
+        )
 
         with self._cache_lock:
             if cache_path.exists():
@@ -849,9 +1027,9 @@ class ScryfallCardPreview(ctk.CTkToplevel):
                     format="PNG",
                     optimize=True,
                 )
-
-                temporary_path.replace(cache_path)
-
+                temporary_path.replace(
+                    cache_path
+                )
             finally:
                 if temporary_path.exists():
                     try:
@@ -859,10 +1037,7 @@ class ScryfallCardPreview(ctk.CTkToplevel):
                     except OSError:
                         pass
 
-    def _resize_image(
-        self,
-        image,
-    ):
+    def _resize_image(self, image):
         try:
             resampling = Image.Resampling.LANCZOS
         except AttributeError:

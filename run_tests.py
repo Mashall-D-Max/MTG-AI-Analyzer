@@ -3,10 +3,13 @@ import sys
 import traceback
 from pathlib import Path
 
+
 TESTS = [
     "test_scryfall_query_builder.py",
     "test_scryfall_search_client.py",
     "test_scryfall_thumbnail_service.py",
+    "test_scryfall_card_preview.py",
+    "test_deck_add_card.py",
     "test_compare_advisor.py",
     "test_meta_compare_basic.py",
     "test_meta_compare_zones.py",
@@ -29,7 +32,10 @@ def run_test(test_file):
     path = Path(test_file)
 
     if not path.exists():
-        print(f"[ERROR] Файл теста не найден: " f"{test_file}")
+        print(
+            f"[ERROR] Файл теста не найден: "
+            f"{test_file}"
+        )
         return False
 
     old_argv = sys.argv[:]
